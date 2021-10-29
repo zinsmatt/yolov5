@@ -414,19 +414,17 @@ class LoadImagesAndLabels(Dataset):
         except Exception as e:
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {HELP_URL}')
 
-        print(len(self.img_files), "================> ", self.img_files[:5])
-
 
         if len(json_dataset) == 0:
             raise Exception("Error: missing JSON dataset file")
             exit()
 
-        ### Load JSON dataset
+        ### [mz] Load JSON dataset
         try:
             with open(json_dataset, "r") as fin:
                 json_data = json.load(fin)
-            self.img_files = [data["file_name"] for data in json_data[:10]]
-            self.annotations = {}
+            self.img_files = [data["file_name"] for data in json_data]
+            self.annotations = []
             for fi, f in enumerate(self.img_files):
                 data = json_data[fi]
                 w = data["width"]
@@ -445,7 +443,7 @@ class LoadImagesAndLabels(Dataset):
                     sin_angle = np.sin(ell["angle"])
                     label = [cat] + center.tolist() + axes.tolist() + [sin_angle]
                     annots.append(label)
-                self.annotations[f] = annots
+                self.annotations.append(np.array(annots))
         except Exception as e:
             raise Exception("Error loading data from", json_dataset)
 
@@ -457,7 +455,6 @@ class LoadImagesAndLabels(Dataset):
         self.label_files = img2label_paths(self.img_files)  # labels
         cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix('.cache') # initial
         cache_path = Path("/home/mzins/dev/yolov5/dataset/train/labels.cache")
-        print("##################################### ", cache_path)
         try:
             cache, exists = np.load(cache_path, allow_pickle=True).item(), True  # load dict
             assert cache['version'] == self.cache_version  # same version
@@ -467,14 +464,12 @@ class LoadImagesAndLabels(Dataset):
 
         # Display cache
         nf, nm, ne, nc, n = cache.pop('results')  # found, missing, empty, corrupted, total
-        print("===========================> nf = ", nf)
         if exists:
             d = f"Scanning '{cache_path}' images and labels... {nf} found, {nm} missing, {ne} empty, {nc} corrupted"
             tqdm(None, desc=prefix + d, total=n, initial=n)  # display cache results
             if cache['msgs']:
                 logging.info('\n'.join(cache['msgs']))  # display warnings
         assert nf > 0 or not augment, f'{prefix}No labels in {cache_path}. Can not train without labels. See {HELP_URL}'
-        exit()
 
         # Read cache
         [cache.pop(k) for k in ('hash', 'version', 'msgs')]  # remove items
@@ -556,7 +551,7 @@ class LoadImagesAndLabels(Dataset):
         nm, nf, ne, nc, msgs = 0, 0, 0, 0, []  # number missing, found, empty, corrupt, messages
         desc = f"{prefix}Scanning '{path.parent / path.stem}' images and labels..."
         with Pool(NUM_THREADS) as pool:
-            pbar = tqdm(pool.imap(verify_image_label, zip(self.img_files, self.label_files, repeat(prefix), repeat(self.annotations))),
+            pbar = tqdm(pool.imap(verify_image_label, zip(self.img_files, self.label_files, repeat(prefix), self.annotations)),
                         desc=desc, total=len(self.img_files))
             for im_file, l, shape, segments, nm_f, nf_f, ne_f, nc_f, msg in pbar:
                 nm += nm_f
@@ -930,7 +925,7 @@ def autosplit(path='../datasets/coco128/images', weights=(0.9, 0.1, 0.0), annota
 
 
 def verify_image_label(args):
-    print("args = ", args)
+    # print("args = ", args)
     # Verify one image-label pair
     im_file, lb_file, prefix, annotations = args
     nm, nf, ne, nc, msg, segments = 0, 0, 0, 0, '', []  # number (missing, found, empty, corrupt), message, segments
@@ -961,8 +956,7 @@ def verify_image_label(args):
             #         l = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
             #     l = np.array(l, dtype=np.float32)
             #     # print("lllllllllllllllllllllllllll ", l.shape)
-            l = np.array(annotations[im_file])            
-            print("lllllllllllllllllllllllllll ", l.shape)
+            l = annotations
             nl = len(l)
             if nl:
                 #assert l.shape[1] == 5, f'labels require 5 columns, {l.shape[1]} columns detected'

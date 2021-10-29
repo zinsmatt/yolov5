@@ -149,7 +149,10 @@ class ComputeLoss:
                 iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
                 # print("pbox shape:: ", pbox.shape)
                 # print("tbox shape::: ", tbox[i].shape)
-                lbox += torch.mean((pbox - tbox[i])**2) + torch.mean((ps[:, 4].tanh() - tangle[i])**2)
+                aa = torch.mean((pbox - tbox[i])**2)
+                bb = torch.mean((2*ps[:, 4].sigmoid()-1 - tangle[i])**2)
+                # print(tangle[i])
+                lbox += aa + bb * 4
                 # lbox += torch.mean((pbox - tbox[i])**2) + torch.mean((ps[:, 4].tanh())**2)
 
                 # lbox += (1.0 - iou).mean()  # iou loss

@@ -60,14 +60,16 @@ class Detect(nn.Module):
                 if self.grid[i].shape[2:4] != x[i].shape[2:4] or self.onnx_dynamic:
                     self.grid[i], self.anchor_grid[i] = self._make_grid(nx, ny, i)
 
-                # y = x[i].sigmoid()
-                aa=x[i][:, :, :, :, :4].sigmoid()
-                bb = x[i][:, :, :, :, 4:5].tanh()
-                cc = x[i][:, :, :, :, 5:].sigmoid()
-                # print("aa ", aa.shape)
-                # print("bb ", bb.shape)
-                # print("cc ", cc.shape)
-                y = torch.cat((aa, bb, cc), dim=4)
+                y = x[i].sigmoid()
+                # aa=x[i][:, :, :, :, :4].sigmoid()
+                # bb = x[i][:, :, :, :, 4:5].tanh()
+                # cc = x[i][:, :, :, :, 5:].sigmoid()
+                # # print("aa ", aa.shape)
+                # # print("bb ", bb.shape)
+                # # print("cc ", cc.shape)
+                # y = torch.cat((aa, bb, cc), dim=4)
+
+
                 # print(y[0, 0, 0, :3, :])
                 if self.inplace:
                     y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy

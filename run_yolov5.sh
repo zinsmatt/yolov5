@@ -1,0 +1,1 @@
+python detect.py --source dataset/test/images --weights runs/train/exp102/weights/best.pt --name TEST

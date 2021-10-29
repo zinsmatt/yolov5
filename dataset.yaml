@@ -1,0 +1,14 @@
+path: ./dataset
+train: ./train/images
+val: ./valid/images
+test: ./test/images
+
+# Classes
+nc: 7  # number of classes
+names: ["TV",
+        "Xbox",
+        "Chair",
+        "Timer",
+        "Games",
+        "Interruptor",
+        "Gamepad"]
