@@ -149,6 +149,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         if pt:
             visualize = increment_path(save_dir / Path(path).stem, mkdir=True) if visualize else False
             pred = model(img, augment=augment, visualize=visualize)[0]
+            # print("==========++> ", pred.shape)
         elif onnx:
             if dnn:
                 net.setInput(img)
@@ -180,12 +181,19 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         dt[1] += t3 - t2
 
         # NMS
+        # print("BEFORE NMS ", pred.shape)
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
         dt[2] += time_sync() - t3
+        # print("AFTER NMS ", pred[0].shape)
+
+        # print("BEFORE CLASSIFIER: ", len(pred), pred[0].shape)
+        # print(pred[0])
 
         # Second-stage classifier (optional)
         if classify:
             pred = apply_classifier(pred, modelc, img, im0s)
+        # print("AFTER CLASSIFIER: ", len(pred), pred[0].shape)
+        # print(pred[0])
 
         # Process predictions
         for i, det in enumerate(pred):  # per image
@@ -212,7 +220,9 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 # Write results
-                for *xyxy, conf, cls in reversed(det):
+                # print("ddddddeeeeeeeeeeetttttttttttttt = ", det.shape)
+
+                for *xyxy, angle, conf, cls in reversed(det):
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
@@ -222,7 +232,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     if save_img or save_crop or view_img:  # Add bbox to image
                         c = int(cls)  # integer class
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
-                        annotator.box_label(xyxy, label, color=colors(c, True))
+                        # print(xyxy)
+                        annotator.box_label(xyxy, label, color=colors(c, True), angle=np.arcsin(angle.cpu().detach().numpy()))
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 

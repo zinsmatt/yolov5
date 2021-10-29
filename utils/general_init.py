@@ -613,11 +613,10 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     Returns:
          list of detections, on (n,6) tensor per image [xyxy, conf, cls]
     """
-    # print("NMS")
-    # print(prediction.shape)
-    nc = prediction.shape[2] - 6  # number of classes
-    xc = prediction[..., 5] > conf_thres  # candidates
+    # print("!!!!!!!!!!!!!!!!!!!! prediction = ", prediction[0, :4, :])
 
+    nc = prediction.shape[2] - 5  # number of classes
+    xc = prediction[..., 5] > conf_thres  # candidates
 
     # Checks
     assert 0 <= conf_thres <= 1, f'Invalid Confidence threshold {conf_thres}, valid values are between 0.0 and 1.0'
@@ -636,20 +635,16 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     for xi, x in enumerate(prediction):  # image index, image inference
         # Apply constraints
         # x[((x[..., 2:4] < min_wh) | (x[..., 2:4] > max_wh)).any(1), 4] = 0  # width-height
-        # print("before threshold conf x ", x.shape)
         x = x[xc[xi]]  # confidence
-        # print("after threshold conf x ", x.shape)
 
         # Cat apriori labels if autolabelling
         if labels and len(labels[xi]):
             l = labels[xi]
-            v = torch.zeros((len(l), nc + 5), device=x.device)
-            v[:, :4] = l[:, 1:5]  # box
-            v[:, 4] = 1.0  # conf
-            v[range(len(l)), l[:, 0].long() + 5] = 1.0  # cls
+            v = torch.zeros((len(l), nc + 6), device=x.device)
+            v[:, :5] = l[:, 1:6]  # box
+            v[:, 5] = 1.0  # conf
+            v[range(len(l)), l[:, 0].long() + 6] = 1.0  # cls
             x = torch.cat((x, v), 0)
-        # print("after cat a priori if autolabelling x ", x.shape)
-
 
         # If none remain process next image
         if not x.shape[0]:
@@ -660,20 +655,23 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
 
         # Box (center x, center y, width, height) to (x1, y1, x2, y2)
         box = xywh2xyxy(x[:, :4])
-        angle = x[:, 4].reshape((-1, 1))
+        angle = x[:, 4].view((-1, 1))
 
         # Detections matrix nx6 (xyxy, conf, cls)
         if multi_label:
             i, j = (x[:, 6:] > conf_thres).nonzero(as_tuple=False).T
-            x = torch.cat((box[i], angle[i], x[i, j + 6, None], j[:, None].float()), 1)
+            x = torch.cat((box[i], x[i, j + 6, None], j[:, None].float()), 1)
         else:  # best class only
+            # print("-------------------> ", x.shape)
             conf, j = x[:, 6:].max(1, keepdim=True)
+            # print("conf ", conf[0, :])
+            # print("j ", j[:, 0])
             x = torch.cat((box, angle, conf, j.float()), 1)[conf.view(-1) > conf_thres]
-        # print("after best class only x ", x.shape)
+
+        # print("x =====> ", x.shape)
         # Filter by class
         if classes is not None:
             x = x[(x[:, 6:7] == torch.tensor(classes, device=x.device)).any(1)]
-        # print("after filt by class x ", x.shape)
 
         # Apply finite constraint
         # if not torch.isfinite(x).all():
@@ -687,11 +685,14 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
             x = x[x[:, 5].argsort(descending=True)[:max_nms]]  # sort by confidence
 
         # Batched NMS
-        c = x[:, 6:7] * (0 if agnostic else max_wh)  # classes
-        boxes, scores = x[:, :4] + c, x[:, 5]  # boxes (offset by class), scores
-        # print("boxes ", boxes.shape)
+        c = x[:, 5:6] * (0 if agnostic else max_wh)  # classes
+        boxes, angles, scores = x[:, :4] + c, x[:, 4], x[:, 5]  # boxes (offset by class), scores
+        # print(scores)
+        # print("boxes =====> ", boxes.shape)
+        # print("x =====> ", x.shape)
         i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
-        # print("i ", i.shape)
+        # print(i)
+        # print(i.shape[0])
         if i.shape[0] > max_det:  # limit detections
             i = i[:max_det]
         if merge and (1 < n < 3E3):  # Merge NMS (boxes merged using weighted mean)
@@ -703,10 +704,11 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
                 i = i[iou.sum(1) > 1]  # require redundancy
 
         output[xi] = x[i]
+        # print("_____> output shape = ", output[xi].shape)
         if (time.time() - t) > time_limit:
             print(f'WARNING: NMS time limit {time_limit}s exceeded')
             break  # time limit exceeded
-        # print("NMX output  => ", x.shape)
+
     return output
 
 

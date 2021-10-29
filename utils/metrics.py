@@ -129,9 +129,9 @@ class ConfusionMatrix:
         Returns:
             None, updates confusion matrix accordingly
         """
-        detections = detections[detections[:, 4] > self.conf]
+        detections = detections[detections[:, 5] > self.conf]
         gt_classes = labels[:, 0].int()
-        detection_classes = detections[:, 5].int()
+        detection_classes = detections[:, 6].int()
         iou = box_iou(labels[:, 1:], detections[:, :4])
 
         x = torch.where(iou > self.iou_thres)

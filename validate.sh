@@ -1,0 +1,1 @@
+python val.py --data dataset.yaml --weights runs/train/exp37/weights/best.pt   

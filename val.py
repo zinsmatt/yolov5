@@ -67,7 +67,7 @@ def process_batch(detections, labels, iouv):
     """
     correct = torch.zeros(detections.shape[0], iouv.shape[0], dtype=torch.bool, device=iouv.device)
     iou = box_iou(labels[:, 1:], detections[:, :4])
-    x = torch.where((iou >= iouv[0]) & (labels[:, 0:1] == detections[:, 5]))  # IoU above threshold and classes match
+    x = torch.where((iou >= iouv[0]) & (labels[:, 0:1] == detections[:, 6]))  # IoU above threshold and classes match
     if x[0].shape[0]:
         matches = torch.cat((torch.stack(x, 1), iou[x[0], x[1]][:, None]), 1).cpu().numpy()  # [label, detection, iou]
         if x[0].shape[0] > 1:
@@ -77,6 +77,7 @@ def process_batch(detections, labels, iouv):
             matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
         matches = torch.Tensor(matches).to(iouv.device)
         correct[matches[:, 1].long()] = matches[:, 2:3] >= iouv
+    # print(correct)
     return correct
 
 
@@ -179,7 +180,8 @@ def run(data,
             loss += compute_loss([x.float() for x in train_out], targets)[1]  # box, obj, cls
 
         # Run NMS
-        targets[:, 2:] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
+        # print("Val targets: ", targets.shape)
+        targets[:, 2:-1] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
         lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
         t3 = time_sync()
         out = non_max_suppression(out, conf_thres, iou_thres, labels=lb, multi_label=True, agnostic=single_cls)
@@ -189,7 +191,11 @@ def run(data,
         for si, pred in enumerate(out):
             labels = targets[targets[:, 0] == si, 1:]
             nl = len(labels)
+            # print("###############################  nl = ", nl)
             tcls = labels[:, 0].tolist() if nl else []  # target class
+            # print("==============++> tcls = ", tcls)
+            # print("pred isze === ", pred.shape)
+            # print(pred[:10, :])
             path, shape = Path(paths[si]), shapes[si][0]
             seen += 1
 
@@ -214,7 +220,12 @@ def run(data,
                     confusion_matrix.process_batch(predn, labelsn)
             else:
                 correct = torch.zeros(pred.shape[0], niou, dtype=torch.bool)
-            stats.append((correct.cpu(), pred[:, 4].cpu(), pred[:, 5].cpu(), tcls))  # (correct, conf, pcls, tcls)
+            stats.append((correct.cpu(), pred[:, 5].cpu(), pred[:, 6].cpu(), tcls))  # (correct, conf, pcls, tcls)
+            # print("correct ", correct)
+            # print("pred ", pred[:, 5])
+            # print("pcls ", pred[:, 6])
+            # print("tcls ", tcls)
+
 
             # Save/log
             if save_txt:
@@ -222,6 +233,8 @@ def run(data,
             if save_json:
                 save_one_json(predn, jdict, path, class_map)  # append to COCO-JSON dictionary
             callbacks.run('on_val_image_end', pred, predn, path, names, img[si])
+
+
 
         # Plot images
         if plots and batch_i < 3:

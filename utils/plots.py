@@ -78,7 +78,7 @@ class Annotator:
             self.im = im
         self.lw = line_width or max(round(sum(im.shape) / 2 * 0.003), 2)  # line width
 
-    def box_label(self, box, label='', color=(128, 128, 128), txt_color=(255, 255, 255)):
+    def box_label(self, box, label='', color=(128, 128, 128), txt_color=(255, 255, 255), angle=0):
         # Add one xyxy box to image with label
         if self.pil or not is_ascii(label):
             self.draw.rectangle(box, width=self.lw, outline=color)  # box
@@ -94,6 +94,12 @@ class Annotator:
         else:  # cv2
             p1, p2 = (int(box[0]), int(box[1])), (int(box[2]), int(box[3]))
             cv2.rectangle(self.im, p1, p2, color, thickness=self.lw, lineType=cv2.LINE_AA)
+            center = (np.array(p1) + np.array(p2)) /2
+            axes = (np.array(p2) - np.array(p1)) / 2
+            center = center.round()
+            axes = axes.round()
+            # print("=======================> ", angle, np.rad2deg(angle))
+            cv2.ellipse(self.im, (int(center[0]), int(center[1])), (int(axes[0]), int(axes[1])), np.rad2deg(angle), 0, 360, (0, 255, 0), 2)
             if label:
                 tf = max(self.lw - 1, 1)  # font thickness
                 w, h = cv2.getTextSize(label, 0, fontScale=self.lw / 3, thickness=tf)[0]  # text width, height
@@ -141,14 +147,20 @@ def butter_lowpass_filtfilt(data, cutoff=1500, fs=50000, order=5):
 
 def output_to_target(output):
     # Convert model output to target format [batch_id, class_id, x, y, w, h, conf]
+    # print("len output = ", len(output))
     targets = []
     for i, o in enumerate(output):
-        for *box, conf, cls in o.cpu().numpy():
-            targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), conf])
+        # print(o.shape)
+        # print(o[:2, :])
+        for *box, angle, conf, cls in o.cpu().numpy():
+            # print(box)
+            # print(angle, conf)
+            targets.append([i, cls, *list(*xyxy2xywh(np.array(box)[None])), angle, conf])
     return np.array(targets)
 
 
 def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max_size=1920, max_subplots=16):
+    # print("plotiimages ", targets.shape)
     # Plot image grid with labels
     if isinstance(images, torch.Tensor):
         images = images.cpu().float().numpy()
@@ -178,18 +190,23 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
 
     # Annotate
     fs = int((h + w) * ns * 0.01)  # font size
-    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=True)
+    annotator = Annotator(mosaic, line_width=round(fs / 10), font_size=fs, pil=False)
     for i in range(i + 1):
         x, y = int(w * (i // ns)), int(h * (i % ns))  # block origin
-        annotator.rectangle([x, y, x + w, y + h], None, (255, 255, 255), width=2)  # borders
-        if paths:
-            annotator.text((x + 5, y + 5 + h), text=Path(paths[i]).name[:40], txt_color=(220, 220, 220))  # filenames
+        # annotator.rectangle([x, y, x + w, y + h], None, (255, 255, 255), width=2)  # borders
+        # if paths:
+        #     annotator.text((x + 5, y + 5 + h), text=Path(paths[i]).name[:40], txt_color=(220, 220, 220))  # filenames
         if len(targets) > 0:
             ti = targets[targets[:, 0] == i]  # image targets
             boxes = xywh2xyxy(ti[:, 2:6]).T
             classes = ti[:, 1].astype('int')
-            labels = ti.shape[1] == 6  # labels if no conf column
-            conf = None if labels else ti[:, 6]  # check for confidence presence (label vs pred)
+            labels = ti.shape[1] == 7  # labels if no conf column size = 7 if no conf (targets for training) but 8 if with conf (results from predictions)
+            conf = None if labels else ti[:, 7]  # check for confidence presence (label vs pred) ################### CHECK IF GOOD
+            angle = np.arcsin(ti[:, 6])
+            # print("______________________________", end=" ")
+            # if labels:print("LABELS")
+            # else:
+            #     print("NO labels: ", ti[:2, :])
 
             if boxes.shape[1]:
                 if boxes.max() <= 1.01:  # if normalized with tolerance 0.01
@@ -205,8 +222,9 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
                 cls = names[cls] if names else cls
                 if labels or conf[j] > 0.25:  # 0.25 conf thresh
                     label = f'{cls}' if labels else f'{cls} {conf[j]:.1f}'
-                    annotator.box_label(box, label, color=color)
-    annotator.im.save(fname)  # save
+                    annotator.box_label(box, label, color=color, angle=angle[j])
+    cv2.imwrite(str(fname), annotator.im[:, :, ::-1])
+    # annotator.im.save(fname)  # save
 
 
 def plot_lr_scheduler(optimizer, scheduler, epochs=300, save_dir=''):
@@ -298,7 +316,7 @@ def plot_labels(labels, names=(), save_dir=Path('')):
     print('Plotting labels... ')
     c, b = labels[:, 0], labels[:, 1:].transpose()  # classes, boxes
     nc = int(c.max() + 1)  # number of classes
-    x = pd.DataFrame(b.transpose(), columns=['x', 'y', 'width', 'height'])
+    x = pd.DataFrame(b.transpose(), columns=['x', 'y', 'width', 'height', 'angle'])
 
     # seaborn correlogram
     sn.pairplot(x, corner=True, diag_kind='auto', kind='hist', diag_kws=dict(bins=50), plot_kws=dict(pmax=0.9))
@@ -324,7 +342,7 @@ def plot_labels(labels, names=(), save_dir=Path('')):
     labels[:, 1:] = xywh2xyxy(labels[:, 1:]) * 2000
     img = Image.fromarray(np.ones((2000, 2000, 3), dtype=np.uint8) * 255)
     for cls, *box in labels[:1000]:
-        ImageDraw.Draw(img).rectangle(box, width=1, outline=colors(cls))  # plot
+        ImageDraw.Draw(img).rectangle(box[:4], width=1, outline=colors(cls))  # plot
     ax[1].imshow(img)
     ax[1].axis('off')
 

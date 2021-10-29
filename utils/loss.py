@@ -115,13 +115,27 @@ class ComputeLoss:
             setattr(self, k, getattr(det, k))
 
     def __call__(self, p, targets):  # predictions, targets, model
+        # print("NC = ", self.nc)
+        # print("predictions size = ", len(p))
+        # print(p[0].shape)
+        # print("===========================> targets shape: ", targets.shape)
+        # print(targets[:2, :])
+
         device = targets.device
         lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
-        tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
+        tcls, tbox, tangle, indices, anchors = self.build_targets(p, targets)  # targets
+        # print(tcls[0].shape)
+        # print(tbox[0].shape)
+        # print(tangle[0].shape)
+        # print(len(indices), len(indices[0]), indices[0][0].shape)
+        # print(anchors[0].shape)
 
         # Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
             b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
+            # print("image: ", b)
+            # print("anchor: ", a)
+            # print("grid xy: ", gj, gi)
             tobj = torch.zeros_like(pi[..., 0], device=device)  # target obj
 
             n = b.shape[0]  # number of targets
@@ -133,7 +147,12 @@ class ComputeLoss:
                 pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[i]
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
                 iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
-                lbox += (1.0 - iou).mean()  # iou loss
+                # print("pbox shape:: ", pbox.shape)
+                # print("tbox shape::: ", tbox[i].shape)
+                lbox += torch.mean((pbox - tbox[i])**2) + torch.mean((ps[:, 4].tanh() - tangle[i])**2)
+                # lbox += torch.mean((pbox - tbox[i])**2) + torch.mean((ps[:, 4].tanh())**2)
+
+                # lbox += (1.0 - iou).mean()  # iou loss
 
                 # Objectness
                 score_iou = iou.detach().clamp(0).type(tobj.dtype)
@@ -144,15 +163,15 @@ class ComputeLoss:
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)
-                    t = torch.full_like(ps[:, 5:], self.cn, device=device)  # targets
+                    t = torch.full_like(ps[:, 6:], self.cn, device=device)  # targets
                     t[range(n), tcls[i]] = self.cp
-                    lcls += self.BCEcls(ps[:, 5:], t)  # BCE
+                    lcls += self.BCEcls(ps[:, 6:], t)  # BCE
 
                 # Append targets to text file
                 # with open('targets.txt', 'a') as file:
                 #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
 
-            obji = self.BCEobj(pi[..., 4], tobj)
+            obji = self.BCEobj(pi[..., 5], tobj)
             lobj += obji * self.balance[i]  # obj loss
             if self.autobalance:
                 self.balance[i] = self.balance[i] * 0.9999 + 0.0001 / obji.detach().item()
@@ -167,10 +186,15 @@ class ComputeLoss:
         return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls)).detach()
 
     def build_targets(self, p, targets):
+
+        # print("targets = ", targets.shape)
+        # print("targets[6] = ", targets[:, 6])
         # Build targets for compute_loss(), input targets(image,class,x,y,w,h)
         na, nt = self.na, targets.shape[0]  # number of anchors, targets
-        tcls, tbox, indices, anch = [], [], [], []
-        gain = torch.ones(7, device=targets.device)  # normalized to gridspace gain
+        # print("nb anchors = ", na)
+        # print("nb targets = ", nt)
+        tcls, tbox, tangle, indices, anch = [], [], [], [], []
+        gain = torch.ones(8, device=targets.device)  # normalized to gridspace gain
         ai = torch.arange(na, device=targets.device).float().view(na, 1).repeat(1, nt)  # same as .repeat_interleave(nt)
         targets = torch.cat((targets.repeat(na, 1, 1), ai[:, :, None]), 2)  # append anchor indices
 
@@ -182,24 +206,30 @@ class ComputeLoss:
 
         for i in range(self.nl):
             anchors = self.anchors[i]
+            # [mz] multiply by the size of the grid in x and y of layer 'i'
             gain[2:6] = torch.tensor(p[i].shape)[[3, 2, 3, 2]]  # xyxy gain
 
             # Match targets to anchors
-            t = targets * gain
+            t = targets * gain # [mz] element-wise multiplication (seems to be just a scale factor applied on the coordinates)
             if nt:
+
+                # [mz] First filtering
                 # Matches
                 r = t[:, :, 4:6] / anchors[:, None]  # wh ratio
                 j = torch.max(r, 1. / r).max(2)[0] < self.hyp['anchor_t']  # compare
                 # j = wh_iou(anchors, t[:, 4:6]) > model.hyp['iou_t']  # iou(3,n)=wh_iou(anchors(3,2), gwh(n,2))
                 t = t[j]  # filter
 
+                # [mz] Second filtering
                 # Offsets
                 gxy = t[:, 2:4]  # grid xy
                 gxi = gain[[2, 3]] - gxy  # inverse
                 j, k = ((gxy % 1. < g) & (gxy > 1.)).T
                 l, m = ((gxi % 1. < g) & (gxi > 1.)).T
                 j = torch.stack((torch.ones_like(j), j, k, l, m))
-                t = t.repeat((5, 1, 1))[j]
+                t = t.repeat((5, 1, 1))
+                t = t[j]
+
                 offsets = (torch.zeros_like(gxy)[None] + off[:, None])[j]
             else:
                 t = targets[0]
@@ -211,6 +241,7 @@ class ComputeLoss:
             gwh = t[:, 4:6]  # grid wh
             gij = (gxy - offsets).long()
             gi, gj = gij.T  # grid xy indices
+            
 
             # Append
             a = t[:, 6].long()  # anchor indices
@@ -218,5 +249,12 @@ class ComputeLoss:
             tbox.append(torch.cat((gxy - gij, gwh), 1))  # box
             anch.append(anchors[a])  # anchors
             tcls.append(c)  # class
+            tangle.append(t[:, 6].reshape((-1, 1)))
+            # print("tcls = ", tcls)
+            # print("tbox = ", tbox)
+            # print(tangle.shape)
+            # print("tangle = ", tangle.T)
+            # print("indices = ", indices)
+            # print("anch = ", anch)
 
-        return tcls, tbox, indices, anch
+        return tcls, tbox, tangle, indices, anch

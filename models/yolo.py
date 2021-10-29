@@ -40,7 +40,7 @@ class Detect(nn.Module):
     def __init__(self, nc=80, anchors=(), ch=(), inplace=True):  # detection layer
         super().__init__()
         self.nc = nc  # number of classes
-        self.no = nc + 5  # number of outputs per anchor
+        self.no = nc + 6  # number of outputs per anchor
         self.nl = len(anchors)  # number of detection layers
         self.na = len(anchors[0]) // 2  # number of anchors
         self.grid = [torch.zeros(1)] * self.nl  # init grid
@@ -60,7 +60,15 @@ class Detect(nn.Module):
                 if self.grid[i].shape[2:4] != x[i].shape[2:4] or self.onnx_dynamic:
                     self.grid[i], self.anchor_grid[i] = self._make_grid(nx, ny, i)
 
-                y = x[i].sigmoid()
+                # y = x[i].sigmoid()
+                aa=x[i][:, :, :, :, :4].sigmoid()
+                bb = x[i][:, :, :, :, 4:5].tanh()
+                cc = x[i][:, :, :, :, 5:].sigmoid()
+                # print("aa ", aa.shape)
+                # print("bb ", bb.shape)
+                # print("cc ", cc.shape)
+                y = torch.cat((aa, bb, cc), dim=4)
+                # print(y[0, 0, 0, :3, :])
                 if self.inplace:
                     y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
@@ -70,7 +78,9 @@ class Detect(nn.Module):
                     y = torch.cat((xy, wh, y[..., 4:]), -1)
                 z.append(y.view(bs, -1, self.no))
 
-        return x if self.training else (torch.cat(z, 1), x)
+        ret =  x if self.training else (torch.cat(z, 1), x)
+        # print("RET = ", len(ret), ret[0].shape)
+        return ret
 
     def _make_grid(self, nx=20, ny=20, i=0):
         d = self.anchors[i].device

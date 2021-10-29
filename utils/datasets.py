@@ -93,7 +93,7 @@ def exif_transpose(image):
 
 
 def create_dataloader(path, imgsz, batch_size, stride, single_cls=False, hyp=None, augment=False, cache=False, pad=0.0,
-                      rect=False, rank=-1, workers=8, image_weights=False, quad=False, prefix=''):
+                      rect=False, rank=-1, workers=8, image_weights=False, quad=False, prefix='', json_dataset=""):
     # Make sure only the first process in DDP process the dataset first, and the following others can use the cache
     with torch_distributed_zero_first(rank):
         dataset = LoadImagesAndLabels(path, imgsz, batch_size,
@@ -105,7 +105,8 @@ def create_dataloader(path, imgsz, batch_size, stride, single_cls=False, hyp=Non
                                       stride=int(stride),
                                       pad=pad,
                                       image_weights=image_weights,
-                                      prefix=prefix)
+                                      prefix=prefix,
+                                      json_dataset=json_dataset)
 
     batch_size = min(batch_size, len(dataset))
     nw = min([os.cpu_count(), batch_size if batch_size > 1 else 0, workers])  # number of workers
@@ -378,7 +379,7 @@ class LoadImagesAndLabels(Dataset):
     cache_version = 0.6  # dataset labels *.cache version
 
     def __init__(self, path, img_size=640, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
-                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix=''):
+                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix='', json_dataset=""):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -390,6 +391,8 @@ class LoadImagesAndLabels(Dataset):
         self.path = path
         self.albumentations = Albumentations() if augment else None
 
+
+        # [mz] Load images files list
         try:
             f = []  # image files
             for p in path if isinstance(path, list) else [path]:
@@ -411,9 +414,50 @@ class LoadImagesAndLabels(Dataset):
         except Exception as e:
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {HELP_URL}')
 
+        print(len(self.img_files), "================> ", self.img_files[:5])
+
+
+        if len(json_dataset) == 0:
+            raise Exception("Error: missing JSON dataset file")
+            exit()
+
+        ### Load JSON dataset
+        try:
+            with open(json_dataset, "r") as fin:
+                json_data = json.load(fin)
+            self.img_files = [data["file_name"] for data in json_data[:10]]
+            self.annotations = {}
+            for fi, f in enumerate(self.img_files):
+                data = json_data[fi]
+                w = data["width"]
+                h = data["height"]
+                annots = []
+                for det in data["annotations"]:
+                    cat = det["category_id"]
+                    ell = det["ellipse"]
+                    axes = np.asarray(ell["axes"])
+                    center = np.asarray(ell["center"])
+                    center[0] /= w
+                    center[1] /= h
+                    axes *= 2
+                    axes[0] /= w
+                    axes[1] /= h
+                    sin_angle = np.sin(ell["angle"])
+                    label = [cat] + center.tolist() + axes.tolist() + [sin_angle]
+                    annots.append(label)
+                self.annotations[f] = annots
+        except Exception as e:
+            raise Exception("Error loading data from", json_dataset)
+
+        
+        # print(len(self.img_files), "================> ", self.img_files[:5])
+        # print([*self.annotations.items()][:3])
+
         # Check cache
         self.label_files = img2label_paths(self.img_files)  # labels
-        cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix('.cache')
+        cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix('.cache') # initial
+        cache_path = Path("/home/mzins/dev/yolov5/dataset/train/labels.cache")
+        print("##################################### ", cache_path)
         try:
             cache, exists = np.load(cache_path, allow_pickle=True).item(), True  # load dict
             assert cache['version'] == self.cache_version  # same version
@@ -423,12 +467,14 @@ class LoadImagesAndLabels(Dataset):
 
         # Display cache
         nf, nm, ne, nc, n = cache.pop('results')  # found, missing, empty, corrupted, total
+        print("===========================> nf = ", nf)
         if exists:
             d = f"Scanning '{cache_path}' images and labels... {nf} found, {nm} missing, {ne} empty, {nc} corrupted"
             tqdm(None, desc=prefix + d, total=n, initial=n)  # display cache results
             if cache['msgs']:
                 logging.info('\n'.join(cache['msgs']))  # display warnings
         assert nf > 0 or not augment, f'{prefix}No labels in {cache_path}. Can not train without labels. See {HELP_URL}'
+        exit()
 
         # Read cache
         [cache.pop(k) for k in ('hash', 'version', 'msgs')]  # remove items
@@ -510,7 +556,7 @@ class LoadImagesAndLabels(Dataset):
         nm, nf, ne, nc, msgs = 0, 0, 0, 0, []  # number missing, found, empty, corrupt, messages
         desc = f"{prefix}Scanning '{path.parent / path.stem}' images and labels..."
         with Pool(NUM_THREADS) as pool:
-            pbar = tqdm(pool.imap(verify_image_label, zip(self.img_files, self.label_files, repeat(prefix))),
+            pbar = tqdm(pool.imap(verify_image_label, zip(self.img_files, self.label_files, repeat(prefix), repeat(self.annotations))),
                         desc=desc, total=len(self.img_files))
             for im_file, l, shape, segments, nm_f, nf_f, ne_f, nc_f, msg in pbar:
                 nm += nm_f
@@ -583,7 +629,6 @@ class LoadImagesAndLabels(Dataset):
                                                  scale=hyp['scale'],
                                                  shear=hyp['shear'],
                                                  perspective=hyp['perspective'])
-
         nl = len(labels)  # number of labels
         if nl:
             labels[:, 1:5] = xyxy2xywhn(labels[:, 1:5], w=img.shape[1], h=img.shape[0], clip=True, eps=1E-3)
@@ -611,13 +656,16 @@ class LoadImagesAndLabels(Dataset):
             # Cutouts
             # labels = cutout(img, labels, p=0.5)
 
-        labels_out = torch.zeros((nl, 6))
+        labels_out = torch.zeros((nl, 6+1))
         if nl:
             labels_out[:, 1:] = torch.from_numpy(labels)
 
         # Convert
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
         img = np.ascontiguousarray(img)
+        # print("labels_out shape = ", labels_out.shape)
+        # print(labels_out[:, 0])
+        # print(labels_out[:3])
 
         return torch.from_numpy(img), labels_out, self.img_files[index], shapes
 
@@ -710,14 +758,14 @@ def load_mosaic(self, index):
         # Labels
         labels, segments = self.labels[index].copy(), self.segments[index].copy()
         if labels.size:
-            labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padw, padh)  # normalized xywh to pixel xyxy format
+            labels[:, 1:5] = xywhn2xyxy(labels[:, 1:5], w, h, padw, padh)  # normalized xywh to pixel xyxy format
             segments = [xyn2xy(x, w, h, padw, padh) for x in segments]
         labels4.append(labels)
         segments4.extend(segments)
 
     # Concat/clip labels
     labels4 = np.concatenate(labels4, 0)
-    for x in (labels4[:, 1:], *segments4):
+    for x in (labels4[:, 1:5], *segments4):  # [mz] do not clip angle
         np.clip(x, 0, 2 * s, out=x)  # clip when using random_perspective()
     # img4, labels4 = replicate(img4, labels4)  # replicate
 
@@ -882,8 +930,9 @@ def autosplit(path='../datasets/coco128/images', weights=(0.9, 0.1, 0.0), annota
 
 
 def verify_image_label(args):
+    print("args = ", args)
     # Verify one image-label pair
-    im_file, lb_file, prefix = args
+    im_file, lb_file, prefix, annotations = args
     nm, nf, ne, nc, msg, segments = 0, 0, 0, 0, '', []  # number (missing, found, empty, corrupt), message, segments
     try:
         # verify images
@@ -900,30 +949,35 @@ def verify_image_label(args):
                     msg = f'{prefix}WARNING: {im_file}: corrupt JPEG restored and saved'
 
         # verify labels
-        if os.path.isfile(lb_file):
+        if len(annotations) or os.path.isfile(lb_file):
             nf = 1  # label found
-            with open(lb_file, 'r') as f:
-                l = [x.split() for x in f.read().strip().splitlines() if len(x)]
-                if any([len(x) > 8 for x in l]):  # is segment
-                    classes = np.array([x[0] for x in l], dtype=np.float32)
-                    segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in l]  # (cls, xy1...)
-                    l = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
-                l = np.array(l, dtype=np.float32)
+            # with open(lb_file, 'r') as f:
+            #     l = [x.split() for x in f.read().strip().splitlines() if len(x)]
+
+            #     # [mz] only to transform polyongs to boxes. Not our case.
+            #     if any([len(x) > 8 for x in l]):  # is segment
+            #         classes = np.array([x[0] for x in l], dtype=np.float32)
+            #         segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in l]  # (cls, xy1...)
+            #         l = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
+            #     l = np.array(l, dtype=np.float32)
+            #     # print("lllllllllllllllllllllllllll ", l.shape)
+            l = np.array(annotations[im_file])            
+            print("lllllllllllllllllllllllllll ", l.shape)
             nl = len(l)
             if nl:
-                assert l.shape[1] == 5, f'labels require 5 columns, {l.shape[1]} columns detected'
-                assert (l >= 0).all(), f'negative label values {l[l < 0]}'
-                assert (l[:, 1:] <= 1).all(), f'non-normalized or out of bounds coordinates {l[:, 1:][l[:, 1:] > 1]}'
+                #assert l.shape[1] == 5, f'labels require 5 columns, {l.shape[1]} columns detected'
+                assert (l[:, :-1] >= 0).all(), f'negative label values {l[l < 0]}'
+                assert (l[:, 1:-1] <= 1).all(), f'non-normalized or out of bounds coordinates {l[:, 1:][l[:, 1:] > 1]}'
                 l = np.unique(l, axis=0)  # remove duplicate rows
                 if len(l) < nl:
                     segments = np.unique(segments, axis=0)
                     msg = f'{prefix}WARNING: {im_file}: {nl - len(l)} duplicate labels removed'
             else:
                 ne = 1  # label empty
-                l = np.zeros((0, 5), dtype=np.float32)
+                l = np.zeros((0, 6), dtype=np.float32)
         else:
             nm = 1  # label missing
-            l = np.zeros((0, 5), dtype=np.float32)
+            l = np.zeros((0, 6), dtype=np.float32)
         return im_file, l, shape, segments, nm, nf, ne, nc, msg
     except Exception as e:
         nc = 1
