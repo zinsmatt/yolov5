@@ -169,8 +169,16 @@ class LoadImages:
         else:
             raise Exception(f'ERROR: {p} does not exist')
 
-        images = [x for x in files if x.split('.')[-1].lower() in IMG_FORMATS]
+        if os.path.splitext(p)[1] == ".json":
+            with open(p, "r") as fin:
+                data = json.load(fin)
+            images = [d["file_name"] for d in data]
+        else:
+            images = [x for x in files if x.split('.')[-1].lower() in IMG_FORMATS]
+
         videos = [x for x in files if x.split('.')[-1].lower() in VID_FORMATS]
+        videos = []
+
         ni, nv = len(images), len(videos)
 
         self.img_size = img_size
@@ -431,7 +439,8 @@ class LoadImagesAndLabels(Dataset):
                 h = data["height"]
                 annots = []
                 for det in data["annotations"]:
-                    cat = det["category_id"]
+                    # cat = det["category_id"]
+                    cat = det["object_id"]
                     ell = det["ellipse"]
                     axes = np.asarray(ell["axes"])
                     center = np.asarray(ell["center"])

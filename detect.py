@@ -7,6 +7,7 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -15,6 +16,7 @@ import cv2
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
+from ellcv.types import Ellipse
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
@@ -128,11 +130,21 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         bs = 1  # batch_size
     vid_path, vid_writer = [None] * bs, [None] * bs
 
+
+    json_detections = []
+    json_out_file = "out_detections_yolov5.json"
+
+
     # Run inference
     if pt and device.type != 'cpu':
         model(torch.zeros(1, 3, *imgsz).to(device).type_as(next(model.parameters())))  # run once
     dt, seen = [0.0, 0.0, 0.0], 0
     for path, img, im0s, vid_cap in dataset:
+        # Fill JSON info
+        image_data = {}
+        image_data["file_name"] = path
+        detections = []
+
         t1 = time_sync()
         if onnx:
             img = img.astype('float32')
@@ -185,7 +197,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
         dt[2] += time_sync() - t3
         # print("AFTER NMS ", pred[0].shape)
-
         # print("BEFORE CLASSIFIER: ", len(pred), pred[0].shape)
         # print(pred[0])
 
@@ -202,7 +213,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                 p, s, im0, frame = path[i], f'{i}: ', im0s[i].copy(), dataset.count
             else:
                 p, s, im0, frame = path, '', im0s.copy(), getattr(dataset, 'frame', 0)
-
+            
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # img.jpg
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
@@ -220,8 +231,6 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 # Write results
-                # print("ddddddeeeeeeeeeeetttttttttttttt = ", det.shape)
-
                 for *xyxy, angle, conf, cls in reversed(det):
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
@@ -236,6 +245,23 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         annotator.box_label(xyxy, label, color=colors(c, True), angle=np.arcsin(angle.cpu().detach().numpy()))
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
+
+                    
+                    bbox = [float(x.cpu()) for x in xyxy]
+                    axes = np.array([bbox[2] - bbox[0], bbox[3] - bbox[1]]) / 2
+                    center = np.array([bbox[2] + bbox[0], bbox[3] + bbox[1]]) / 2
+                    angle = np.arcsin(angle.cpu().detach().numpy())
+                    ell = Ellipse.compose(axes, angle, center)
+                    det_dict = {
+                        "category_id": int(cls),
+                        "detection_score": float(conf.cpu()),
+                        "bbox": bbox,
+                        "ellipses": [ell.to_dict()]
+                    }
+                    detections.append(det_dict)
+    
+
+       
 
             # Print time (inference-only)
             print(f'{s}Done. ({t3 - t2:.3f}s)')
@@ -265,6 +291,12 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer[i].write(im0)
 
+        image_data["detections"] = detections
+        json_detections.append(image_data)
+
+    with open(json_out_file, "w") as fout:
+        json.dump(json_detections, fout)
+                
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
     print(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
