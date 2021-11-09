@@ -1,2 +1,2 @@
-python train.py --batch 8 --epochs 30 --data dataset_instance.yaml --weights yolov5m.pt --adam --cfg yolov5m.yaml
+python train.py --batch 8 --epochs 50 --data dataset_instance.yaml --weights yolov5m.pt --cfg yolov5m.yaml
 

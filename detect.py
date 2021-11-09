@@ -139,7 +139,11 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     if pt and device.type != 'cpu':
         model(torch.zeros(1, 3, *imgsz).to(device).type_as(next(model.parameters())))  # run once
     dt, seen = [0.0, 0.0, 0.0], 0
+    counter = -1
     for path, img, im0s, vid_cap in dataset:
+        counter+=1
+        if counter % 5 != 0:
+            continue
         # Fill JSON info
         image_data = {}
         image_data["file_name"] = path
@@ -215,7 +219,9 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                 p, s, im0, frame = path, '', im0s.copy(), getattr(dataset, 'frame', 0)
             
             p = Path(p)  # to Path
-            save_path = str(save_dir / p.name)  # img.jpg
+            sp = str(p).split("/")
+            fp = Path(sp[-2] + "_" + sp[-1])
+            save_path = str(save_dir / fp)  # img.jpg
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
             s += '%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh

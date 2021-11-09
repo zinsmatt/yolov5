@@ -17,6 +17,7 @@ from utils.metrics import bbox_ioa
 class Albumentations:
     # YOLOv5 Albumentations class (optional, only used if package is installed)
     def __init__(self):
+        #print("="*100 + "Albumentations")
         self.transform = None
         try:
             import albumentations as A
@@ -46,6 +47,8 @@ class Albumentations:
 
 
 def augment_hsv(im, hgain=0.5, sgain=0.5, vgain=0.5):
+    #print(im.shape)
+    #print("="*100 + "Augment HSV")
     # HSV color-space augmentation
     if hgain or sgain or vgain:
         r = np.random.uniform(-1, 1, 3) * [hgain, sgain, vgain] + 1  # random gains
@@ -62,6 +65,7 @@ def augment_hsv(im, hgain=0.5, sgain=0.5, vgain=0.5):
 
 
 def hist_equalize(im, clahe=True, bgr=False):
+    #print("="*100 + "Hist Equalize")
     # Equalize histogram on BGR image 'im' with im.shape(n,m,3) and range 0-255
     yuv = cv2.cvtColor(im, cv2.COLOR_BGR2YUV if bgr else cv2.COLOR_RGB2YUV)
     if clahe:
@@ -73,6 +77,7 @@ def hist_equalize(im, clahe=True, bgr=False):
 
 
 def replicate(im, labels):
+    #print("="*100 + "Replicate !!!!!!!!!!!!!!!!!!!!", labels)
     # Replicate labels
     h, w = im.shape[:2]
     boxes = labels[:, 1:].astype(int)
@@ -90,6 +95,7 @@ def replicate(im, labels):
 
 
 def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
+    #print("="*100 + "Letterbox")
     # Resize and pad image while meeting stride-multiple constraints
     shape = im.shape[:2]  # current shape [height, width]
     if isinstance(new_shape, int):
@@ -122,13 +128,14 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleF
     return im, ratio, (dw, dh)
 
 
-def random_perspective(im, targets=(), segments=(), degrees=10, translate=.1, scale=.1, shear=10, perspective=0.0,
+def random_perspective(im, targets=(), segments=(), degrees=0, translate=0, scale=0, shear=0, perspective=1,
                        border=(0, 0)):
+    #print("="*100 + "Random Perspective !!!!!!", targets)
     # [mz] TODO: handle the orientation
     # torchvision.transforms.RandomAffine(degrees=(-10, 10), translate=(.1, .1), scale=(.9, 1.1), shear=(-10, 10))
-    # targets = [cls, xyxy]
+    # targets = [cls, xyxya]
 
-    # print("BEFORE = ",  targets)
+    # #print("BEFORE = ",  targets)
     height = im.shape[0] + border[0] * 2  # shape(h,w,c)
     width = im.shape[1] + border[1] * 2
 
@@ -141,6 +148,7 @@ def random_perspective(im, targets=(), segments=(), degrees=10, translate=.1, sc
     P = np.eye(3)
     P[2, 0] = random.uniform(-perspective, perspective)  # x perspective (about y)
     P[2, 1] = random.uniform(-perspective, perspective)  # y perspective (about x)
+    print("P = \n", P)
 
     # Rotation and Scale
     R = np.eye(3)
@@ -154,18 +162,26 @@ def random_perspective(im, targets=(), segments=(), degrees=10, translate=.1, sc
     S = np.eye(3)
     S[0, 1] = math.tan(random.uniform(-shear, shear) * math.pi / 180)  # x shear (deg)
     S[1, 0] = math.tan(random.uniform(-shear, shear) * math.pi / 180)  # y shear (deg)
-
+    print("====> ", shear)
+    print("====> ", random.uniform(-shear, shear))
     # Translation
     T = np.eye(3)
     T[0, 2] = random.uniform(0.5 - translate, 0.5 + translate) * width  # x translation (pixels)
     T[1, 2] = random.uniform(0.5 - translate, 0.5 + translate) * height  # y translation (pixels)
 
+    print("R = \n", R)
+    print("S = \n", S)
+    print("T = \n", T)
     # Combined rotation matrix
     M = T @ S @ R @ P @ C  # order of operations (right to left) is IMPORTANT
+    M /= M[2, 2]
+    print("MMMM = \n", M)
     if (border[0] != 0) or (border[1] != 0) or (M != np.eye(3)).any():  # image changed
         if perspective:
+            print("perspective")
             im = cv2.warpPerspective(im, M, dsize=(width, height), borderValue=(114, 114, 114))
         else:  # affine
+            print("affine")
             im = cv2.warpAffine(im, M[:2], dsize=(width, height), borderValue=(114, 114, 114))
 
     # Visualize
@@ -209,12 +225,13 @@ def random_perspective(im, targets=(), segments=(), degrees=10, translate=.1, sc
         i = box_candidates(box1=targets[:, 1:5].T * s, box2=new.T, area_thr=0.01 if use_segments else 0.10)
         targets = targets[i]
         targets[:, 1:5] = new[i]
-    # print("AFTER = ",  targets)
+    # #print("AFTER = ",  targets)
 
-    return im, targets
+    return im, targets, M
 
 
 def copy_paste(im, labels, segments, p=0.5):
+    #print("="*100 + "Copy Paste")
     # Implement Copy-Paste augmentation https://arxiv.org/abs/2012.07177, labels as nx5 np.array(cls, xyxy)
     n = len(segments)
     if p and n:
@@ -239,6 +256,7 @@ def copy_paste(im, labels, segments, p=0.5):
 
 
 def cutout(im, labels, p=0.5):
+    #print("="*100 + "Cutout")
     # Applies image cutout augmentation https://arxiv.org/abs/1708.04552
     if random.random() < p:
         h, w = im.shape[:2]
@@ -266,6 +284,7 @@ def cutout(im, labels, p=0.5):
 
 
 def mixup(im, labels, im2, labels2):
+    #print("="*100 + "Mixup")
     # Applies MixUp augmentation https://arxiv.org/pdf/1710.09412.pdf
     r = np.random.beta(32.0, 32.0)  # mixup ratio, alpha=beta=32.0
     im = (im * r + im2 * (1 - r)).astype(np.uint8)

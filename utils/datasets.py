@@ -449,7 +449,7 @@ class LoadImagesAndLabels(Dataset):
                     axes *= 2
                     axes[0] /= w
                     axes[1] /= h
-                    sin_angle = np.sin(ell["angle"])
+                    sin_angle = ell["angle"]
                     label = [cat] + center.tolist() + axes.tolist() + [sin_angle]
                     annots.append(label)
                 self.annotations.append(np.array(annots))
