@@ -191,6 +191,8 @@ class ConfusionMatrix:
 
 def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
     # Returns the IoU of box1 to box2. box1 is 4, box2 is nx4
+    # print("# "*40, box1.shape)
+    # print("# "*40, box2.shape)
     box2 = box2.T
 
     # Get the coordinates of bounding boxes
@@ -333,3 +335,39 @@ def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence'
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
     fig.savefig(Path(save_dir), dpi=250)
     plt.close()
+
+
+
+def generate_sampling_points(range_x, range_y, sampling_x, sampling_y):
+    samples_x = torch.linspace(*range_x, sampling_x)
+    samples_y = torch.linspace(*range_y, sampling_y)
+    # samples_x = torch.linspace(xmin, xmax, sampling_x, device=self.device)
+    # samples_y = torch.linspace(ymin, ymax, sampling_y, device=self.device)
+    y, x = torch.meshgrid(samples_y, samples_x)
+    return torch.cat((x.flatten().view((1, -1)), y.flatten().view((1, -1))), 0).to(torch.device('cuda:0'))
+    # self.sampling_pts = nn.Parameter(torch.cat((x.flatten().view((1, -1)), 
+    #                                             y.flatten().view((1, -1))), 0))
+
+def sample_ellipse(axes, sin, center, points):
+    A = torch.diag(axes)
+    cos = torch.sqrt(1 - sin**2)
+    R = torch.cat((torch.cat((cos, -sin), dim=1),
+                    torch.cat((sin, cos), dim=1)), dim=0)
+    
+    pts_centered = points.T - center
+    M = R @ A @ R.T @ pts_centered.T
+    return torch.einsum("ij,ji->i", pts_centered, M)
+
+def ellipses_sampling_distance(boxes1, boxes2):
+    range_x = [-2.0, 2.0]
+    range_y = [-2.0, 2.0]
+    sampling_x = 20
+    sampling_y = 20
+    points = generate_sampling_points(range_x, range_y, sampling_x, sampling_y)
+    vals = []
+    for bb1, bb2 in zip(boxes1, boxes2):
+        s1 = sample_ellipse(bb1[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb1[:2], points)
+        s2 = sample_ellipse(bb2[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb2[:2], points)
+        vals.append((torch.sqrt(torch.sum((s1 - s2)**2)) / (sampling_x * sampling_y)).unsqueeze(0))
+    return torch.mean(torch.cat(vals))
+

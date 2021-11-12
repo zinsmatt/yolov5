@@ -441,16 +441,24 @@ class LoadImagesAndLabels(Dataset):
                 for det in data["annotations"]:
                     # cat = det["category_id"]
                     cat = det["object_id"]
-                    ell = det["ellipse"]
-                    axes = np.asarray(ell["axes"])
-                    center = np.asarray(ell["center"])
+                    # ell = det["ellipse"]
+                    # axes = np.asarray(ell["axes"])
+                    # center = np.asarray(ell["center"])
+                    # center[0] /= w
+                    # center[1] /= h
+                    # axes *= 2
+                    # axes[0] /= w
+                    # axes[1] /= h
+                    # sin_angle = ell["angle"]
+                    x1, y1, x2, y2 = det["bbox"]
+                    center = [(x1 + x2) / 2, (y1 + y2) / 2]
+                    axes = [(x2 - x1), (y2 - y1)] # for now the network wants to receive xywh
                     center[0] /= w
                     center[1] /= h
-                    axes *= 2
                     axes[0] /= w
                     axes[1] /= h
-                    sin_angle = ell["angle"]
-                    label = [cat] + center.tolist() + axes.tolist() + [sin_angle]
+                    # label = [cat] + center.tolist() + axes.tolist() + [0.0] #[sin_angle]
+                    label = [cat] + center + axes + [0.0] #[sin_angle]
                     annots.append(label)
                 self.annotations.append(np.array(annots))
         except Exception as e:
@@ -530,6 +538,10 @@ class LoadImagesAndLabels(Dataset):
                 elif mini > 1:
                     shapes[i] = [1, 1 / mini]
 
+            # print(shapes)
+            # print(img_size)
+            # print(stride)
+            # print(pad)
             self.batch_shapes = np.ceil(np.array(shapes) * img_size / stride + pad).astype(np.int) * stride
 
         # Cache images into memory for faster training (WARNING: large datasets may exceed system RAM)
@@ -600,32 +612,45 @@ class LoadImagesAndLabels(Dataset):
     #     return self
 
     def __getitem__(self, index):
+        # print("__getitem__ ", index)
         index = self.indices[index]  # linear, shuffled, or image_weights
 
         hyp = self.hyp
         mosaic = self.mosaic and random.random() < hyp['mosaic']
         if mosaic:
+            # print("mosaic")
             # Load mosaic
             img, labels = load_mosaic(self, index)
             shapes = None
 
             # MixUp augmentation
             if random.random() < hyp['mixup']:
+                print("mixup")
                 img, labels = mixup(img, labels, *load_mosaic(self, random.randint(0, self.n - 1)))
 
         else:
+            # print("no mosaic")
             # Load image
             img, (h0, w0), (h, w) = load_image(self, index)
 
             # Letterbox
             shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size  # final letterboxed shape
+            # print("self.rect = ", self.rect)
+            # print(self.batch_shapes[self.batch[index]])
+            # print("shape = ", shape)
+            # print("Before letterbox: ", img.shape)
+            # print(shape)
             img, ratio, pad = letterbox(img, shape, auto=False, scaleup=self.augment)
+            # print("After letterbox: ", img.shape, ratio, pad)
+
             shapes = (h0, w0), ((h / h0, w / w0), pad)  # for COCO mAP rescaling
 
             labels = self.labels[index].copy()
             if labels.size:  # normalized xywh to pixel xyxy format
                 labels[:, 1:] = xywhn2xyxy(labels[:, 1:], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
 
+
+            # xyxy
             if self.augment:
                 img, labels = random_perspective(img, labels,
                                                  degrees=hyp['degrees'],
@@ -646,6 +671,8 @@ class LoadImagesAndLabels(Dataset):
             augment_hsv(img, hgain=hyp['hsv_h'], sgain=hyp['hsv_s'], vgain=hyp['hsv_v'])
 
             # Flip up-down
+            # print("UP DOWN = ", hyp['flipud'])
+            # print("LEFT RIGHT = ", hyp['fliplr'])
             if random.random() < hyp['flipud']:
                 img = np.flipud(img)
                 if nl:
@@ -670,6 +697,11 @@ class LoadImagesAndLabels(Dataset):
         # print("labels_out shape = ", labels_out.shape)
         # print(labels_out[:, 0])
         # print(labels_out[:3])
+        # print("DATASET output ", img.shape)
+        # print("dataset labels_out = ", labels_out.shape)
+        # print(labels_out[:3, :])
+        # print("OUT DATASET = ", labels_out.shape)
+        # print("__getitem__: labels_out first col ", labels_out[:, 0].max())
 
         return torch.from_numpy(img), labels_out, self.img_files[index], shapes
 
@@ -720,8 +752,10 @@ def load_image(self, i):
             im = cv2.imread(path)  # BGR
             assert im is not None, 'Image Not Found ' + path
         h0, w0 = im.shape[:2]  # orig hw
+        # print(self.img_size, h0, w0)
         r = self.img_size / max(h0, w0)  # ratio
         if r != 1:  # if sizes are not equal
+            print("image resize !!!!!!!!!!!!!!!!!!!!!!!!!!!")
             im = cv2.resize(im, (int(w0 * r), int(h0 * r)),
                             interpolation=cv2.INTER_AREA if r < 1 and not self.augment else cv2.INTER_LINEAR)
         return im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
@@ -769,8 +803,8 @@ def load_mosaic(self, index):
 
     # Concat/clip labels
     labels4 = np.concatenate(labels4, 0)
-    for x in (labels4[:, 1:5], *segments4):  # [mz] do not clip angle
-        np.clip(x, 0, 2 * s, out=x)  # clip when using random_perspective()
+    # for x in (labels4[:, 1:5], *segments4):  # [mz] do not clip angle
+    #     np.clip(x, 0, 2 * s, out=x)  # clip when using random_perspective()
     # img4, labels4 = replicate(img4, labels4)  # replicate
 
     # Augment

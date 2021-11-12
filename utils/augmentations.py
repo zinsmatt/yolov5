@@ -35,6 +35,7 @@ class Albumentations:
 
             logging.info(colorstr('albumentations: ') + ', '.join(f'{x}' for x in self.transform.transforms if x.p))
         except ImportError:  # package not installed, skip
+            print("No Albumention: Package not installed skip")
             pass
         except Exception as e:
             logging.info(colorstr('albumentations: ') + f'{e}')
@@ -148,7 +149,7 @@ def random_perspective(im, targets=(), segments=(), degrees=0, translate=0, scal
     P = np.eye(3)
     P[2, 0] = random.uniform(-perspective, perspective)  # x perspective (about y)
     P[2, 1] = random.uniform(-perspective, perspective)  # y perspective (about x)
-    print("P = \n", P)
+    # print("P = \n", P)
 
     # Rotation and Scale
     R = np.eye(3)
@@ -162,26 +163,26 @@ def random_perspective(im, targets=(), segments=(), degrees=0, translate=0, scal
     S = np.eye(3)
     S[0, 1] = math.tan(random.uniform(-shear, shear) * math.pi / 180)  # x shear (deg)
     S[1, 0] = math.tan(random.uniform(-shear, shear) * math.pi / 180)  # y shear (deg)
-    print("====> ", shear)
-    print("====> ", random.uniform(-shear, shear))
+    # print("====> ", shear)
+    # print("====> ", random.uniform(-shear, shear))
     # Translation
     T = np.eye(3)
     T[0, 2] = random.uniform(0.5 - translate, 0.5 + translate) * width  # x translation (pixels)
     T[1, 2] = random.uniform(0.5 - translate, 0.5 + translate) * height  # y translation (pixels)
 
-    print("R = \n", R)
-    print("S = \n", S)
-    print("T = \n", T)
+    # print("R = \n", R)
+    # print("S = \n", S)
+    # print("T = \n", T)
     # Combined rotation matrix
     M = T @ S @ R @ P @ C  # order of operations (right to left) is IMPORTANT
     M /= M[2, 2]
-    print("MMMM = \n", M)
+    # print("MMMM = \n", M)
     if (border[0] != 0) or (border[1] != 0) or (M != np.eye(3)).any():  # image changed
         if perspective:
-            print("perspective")
+            # print("perspective")
             im = cv2.warpPerspective(im, M, dsize=(width, height), borderValue=(114, 114, 114))
         else:  # affine
-            print("affine")
+            # print("affine")
             im = cv2.warpAffine(im, M[:2], dsize=(width, height), borderValue=(114, 114, 114))
 
     # Visualize
@@ -207,6 +208,12 @@ def random_perspective(im, targets=(), segments=(), degrees=0, translate=0, scal
                 new[i] = segment2box(xy, width, height)
 
         else:  # warp boxes
+            # for i in range(n):
+            #     a = targets[i, 1:3]
+            #     b = targets[i, 3:5]
+            #     center = (a + b) / 2
+            #     dim = (b - a) /2
+
             xy = np.ones((n * 4, 3))
             xy[:, :2] = targets[:, [1, 2, 3, 4, 1, 4, 3, 2]].reshape(n * 4, 2)  # x1y1, x2y2, x1y2, x2y1
             xy = xy @ M.T  # transform
@@ -227,13 +234,15 @@ def random_perspective(im, targets=(), segments=(), degrees=0, translate=0, scal
         targets[:, 1:5] = new[i]
     # #print("AFTER = ",  targets)
 
-    return im, targets, M
+    return im, targets
 
 
 def copy_paste(im, labels, segments, p=0.5):
+    # print("CopyPaste")
     #print("="*100 + "Copy Paste")
     # Implement Copy-Paste augmentation https://arxiv.org/abs/2012.07177, labels as nx5 np.array(cls, xyxy)
     n = len(segments)
+    # print(len(segments), " => ", segments)
     if p and n:
         h, w, c = im.shape  # height, width, channels
         im_new = np.zeros(im.shape, np.uint8)
