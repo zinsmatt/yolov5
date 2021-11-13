@@ -69,7 +69,7 @@ class Detect(nn.Module):
 
                 # y = x[i].sigmoid()
                 aa=x[i][:, :, :, :, :4].sigmoid()
-                bb = x[i][:, :, :, :, 4:5].tanh()*0
+                bb = torch.arcsin(x[i][:, :, :, :, 4:5].tanh())*0
                 cc = x[i][:, :, :, :, 5:].sigmoid()
                 # # print("aa ", aa.shape)
                 # # print("bb ", bb.shape)

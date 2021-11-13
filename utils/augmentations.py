@@ -12,6 +12,7 @@ import numpy as np
 
 from utils.general import colorstr, segment2box, resample_segments, check_version
 from utils.metrics import bbox_ioa
+from ellcv.types import Ellipse
 
 
 class Albumentations:
@@ -190,7 +191,7 @@ def random_perspective(im, targets=(), segments=(), degrees=0, translate=0, scal
     # ax = plt.subplots(1, 2, figsize=(12, 6))[1].ravel()
     # ax[0].imshow(im[:, :, ::-1])  # base
     # ax[1].imshow(im2[:, :, ::-1])  # warped
-
+    # print(M)
     # Transform label coordinates
     n = len(targets)
     if n:
@@ -208,11 +209,29 @@ def random_perspective(im, targets=(), segments=(), degrees=0, translate=0, scal
                 new[i] = segment2box(xy, width, height)
 
         else:  # warp boxes
+
+            # M_inv = np.linalg.inv(M)
+            # ellipses = []
+            # good_indices = []
             # for i in range(n):
             #     a = targets[i, 1:3]
             #     b = targets[i, 3:5]
             #     center = (a + b) / 2
-            #     dim = (b - a) /2
+            #     axes = (b - a) /2
+            #     angle = targets[i, 5]
+            #     ell = Ellipse.compose(axes, angle, center).perspective_transform_fast(M)
+            #     ax, a, cent = ell.decompose()
+
+            #     targets[i, 1:3] = cent - ax
+            #     targets[i, 3:5] = cent + ax
+            #     targets[i, 5] = a
+            #     if np.all(targets[i, 1:3] >= 0) and np.all(targets[i, 3:5] <  np.array([width, height])):
+            #         good_indices.append(i)
+
+                
+            # targets = targets[good_indices]
+
+
 
             xy = np.ones((n * 4, 3))
             xy[:, :2] = targets[:, [1, 2, 3, 4, 1, 4, 3, 2]].reshape(n * 4, 2)  # x1y1, x2y2, x1y2, x2y1

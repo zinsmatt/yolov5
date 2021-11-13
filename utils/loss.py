@@ -146,11 +146,12 @@ class ComputeLoss:
                 # the dimensions are multiplied by the anchors 
                 pxy = ps[:, :2].sigmoid() * 2. - 0.5
                 pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[i]
-                pbox = torch.cat((pxy, pwh), 1)  # predicted box
+                pa = torch.arcsin(ps[:, 4].tanh()).reshape((-1, 1))
+                pbox = torch.cat((pxy, pwh, pa), 1)  # predicted box
                 # print("pbox = ", pbox.shape)
                 # print("tbox[i] = ", tbox[i].shape)
                 iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
-                l_ell = ellipses_sampling_distance(pbox, tbox[i])
+                l_ell = ellipses_sampling_distance(pbox, torch.cat((tbox[i], tangle[i]), 1))
                 # print("=============> l_ell = ", l_ell)
                 # print("pbox shape:: ", pbox.shape)
                 # print("tbox shape::: ", tbox[i].shape)

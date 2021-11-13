@@ -431,7 +431,7 @@ class LoadImagesAndLabels(Dataset):
         try:
             with open(json_dataset, "r") as fin:
                 json_data = json.load(fin)
-            self.img_files = [data["file_name"] for data in json_data]
+            self.img_files = [data["file_name"] for data in json_data][:1000] ###################### LIMIT SIZE
             self.annotations = []
             for fi, f in enumerate(self.img_files):
                 data = json_data[fi]
@@ -442,14 +442,8 @@ class LoadImagesAndLabels(Dataset):
                     # cat = det["category_id"]
                     cat = det["object_id"]
                     # ell = det["ellipse"]
-                    # axes = np.asarray(ell["axes"])
-                    # center = np.asarray(ell["center"])
-                    # center[0] /= w
-                    # center[1] /= h
-                    # axes *= 2
-                    # axes[0] /= w
-                    # axes[1] /= h
-                    # sin_angle = ell["angle"]
+
+                    ## bbox 
                     x1, y1, x2, y2 = det["bbox"]
                     center = [(x1 + x2) / 2, (y1 + y2) / 2]
                     axes = [(x2 - x1), (y2 - y1)] # for now the network wants to receive xywh
@@ -457,8 +451,23 @@ class LoadImagesAndLabels(Dataset):
                     center[1] /= h
                     axes[0] /= w
                     axes[1] /= h
-                    # label = [cat] + center.tolist() + axes.tolist() + [0.0] #[sin_angle]
                     label = [cat] + center + axes + [0.0] #[sin_angle]
+
+                    # if np.any(np.array(label[:-1]) < 0):
+                    #     print("="*100)
+                    #     print(label)
+                    #     print("="*100)
+
+                    # ellipses
+                    # ell = det["ellipse"]
+                    # axes = np.asarray(ell["axes"]) * 2
+                    # center = np.asarray(ell["center"])
+                    # center[0] /= w
+                    # center[1] /= h
+                    # axes[0] /= w
+                    # axes[1] /= h
+                    # label = [cat] + center.tolist() + axes.tolist() + [ell["angle"]]
+
                     annots.append(label)
                 self.annotations.append(np.array(annots))
         except Exception as e:
@@ -595,6 +604,7 @@ class LoadImagesAndLabels(Dataset):
         x['msgs'] = msgs  # warnings
         x['version'] = self.cache_version  # cache version
         try:
+            1/0 #################" Force no cache
             np.save(path, x)  # save cache for next time
             path.with_suffix('.cache.npy').rename(path)  # remove .npy suffix
             logging.info(f'{prefix}New cache created: {path}')
@@ -681,6 +691,7 @@ class LoadImagesAndLabels(Dataset):
             # Flip left-right
             if random.random() < hyp['fliplr']:
                 img = np.fliplr(img)
+                # labels[:, 5] = np.pi - labels[:, 5] # invert angle
                 if nl:
                     labels[:, 1] = 1 - labels[:, 1]
 

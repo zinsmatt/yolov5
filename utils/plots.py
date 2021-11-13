@@ -202,6 +202,7 @@ def plot_images(images, targets, paths=None, fname='images.jpg', names=None, max
             classes = ti[:, 1].astype('int')
             labels = ti.shape[1] == 7  # labels if no conf column size = 7 if no conf (targets for training) but 8 if with conf (results from predictions)
             conf = None if labels else ti[:, 7]  # check for confidence presence (label vs pred) ################### CHECK IF GOOD
+            # angle = ti[:, 6]
             angle = np.arcsin(ti[:, 6])
             # print("______________________________", end=" ")
             # if labels:print("LABELS")

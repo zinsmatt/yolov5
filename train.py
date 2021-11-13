@@ -65,6 +65,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     save_dir, epochs, batch_size, weights, single_cls, evolve, data, cfg, resume, noval, nosave, workers, freeze, = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.weights, opt.single_cls, opt.evolve, opt.data, opt.cfg, \
         opt.resume, opt.noval, opt.nosave, opt.workers, opt.freeze
+    
+
 
     # Directories
     w = save_dir / 'weights'  # weights dir
@@ -131,6 +133,12 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         if any(x in k for x in freeze):
             print(f'freezing {k}')
             v.requires_grad = False
+
+    # hyp["degrees"] = 50
+    # hyp["translate"] = 0
+    # hyp["scale"] = 0
+    # hyp["shear"] = 0
+    # hyp["perspective"] = 0
 
     # Image size
     gs = max(int(model.stride.max()), 32)  # grid size (max stride)
@@ -463,6 +471,7 @@ def parse_opt(known=False):
     parser.add_argument('--single-cls', action='store_true', help='train multi-class data as single-class')
     parser.add_argument('--adam', action='store_true', help='use torch.optim.Adam() optimizer')
     parser.add_argument('--sync-bn', action='store_true', help='use SyncBatchNorm, only available in DDP mode')
+    # parser.add_argument('--workers', type=int, default=1, help='maximum number of dataloader workers')
     parser.add_argument('--workers', type=int, default=8, help='maximum number of dataloader workers')
     parser.add_argument('--project', default=ROOT / 'runs/train', help='save to project/name')
     parser.add_argument('--name', default='exp', help='save to project/name')

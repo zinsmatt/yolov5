@@ -256,7 +256,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     bbox = [float(x.cpu()) for x in xyxy]
                     axes = np.array([bbox[2] - bbox[0], bbox[3] - bbox[1]]) / 2
                     center = np.array([bbox[2] + bbox[0], bbox[3] + bbox[1]]) / 2
-                    angle = np.arcsin(angle.cpu().detach().numpy())
+                    angle = angle.cpu().detach().numpy()
                     ell = Ellipse.compose(axes, angle, center)
                     det_dict = {
                         "category_id": int(cls),

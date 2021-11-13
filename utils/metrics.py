@@ -368,6 +368,8 @@ def ellipses_sampling_distance(boxes1, boxes2):
     for bb1, bb2 in zip(boxes1, boxes2):
         s1 = sample_ellipse(bb1[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb1[:2], points)
         s2 = sample_ellipse(bb2[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb2[:2], points)
+        # s1 = sample_ellipse(bb1[2:4]/2, bb1[4].reshape((1, 1)), bb1[:2], points)
+        # s2 = sample_ellipse(bb2[2:4]/2, bb2[4].reshape((1, 1)), bb2[:2], points)
         vals.append((torch.sqrt(torch.sum((s1 - s2)**2)) / (sampling_x * sampling_y)).unsqueeze(0))
     return torch.mean(torch.cat(vals))
 
