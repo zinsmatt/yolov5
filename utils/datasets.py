@@ -440,25 +440,29 @@ class LoadImagesAndLabels(Dataset):
                 annots = []
                 for det in data["annotations"]:
                     # cat = det["category_id"]
+                    # not the problem !!!!!
                     cat = det["object_id"]
-                    # ell = det["ellipse"]
-                    # axes = np.asarray(ell["axes"])
-                    # center = np.asarray(ell["center"])
-                    # center[0] /= w
-                    # center[1] /= h
-                    # axes *= 2
-                    # axes[0] /= w
-                    # axes[1] /= h
-                    # sin_angle = ell["angle"]
-                    x1, y1, x2, y2 = det["bbox"]
-                    center = [(x1 + x2) / 2, (y1 + y2) / 2]
-                    axes = [(x2 - x1), (y2 - y1)] # for now the network wants to receive xywh
+                    ell = det["ellipse"]
+                    axes = np.asarray(ell["axes"])
+                    center = np.asarray(ell["center"])
                     center[0] /= w
                     center[1] /= h
+                    axes *= 2
                     axes[0] /= w
                     axes[1] /= h
-                    # label = [cat] + center.tolist() + axes.tolist() + [0.0] #[sin_angle]
-                    label = [cat] + center + axes + [0.0] #[sin_angle]
+                    angle = ell["angle"]
+                    label = [cat] + center.tolist() + axes.tolist() + [angle]
+
+                    # x1, y1, x2, y2 = det["bbox"]
+                    # center = [(x1 + x2) / 2, (y1 + y2) / 2]
+                    # axes = [(x2 - x1), (y2 - y1)] # for now the network wants to receive xywh
+                    # center[0] /= w
+                    # center[1] /= h
+                    # axes[0] /= w
+                    # axes[1] /= h
+                    # # label = [cat] + center.tolist() + axes.tolist() + [0.0] #[sin_angle]
+                    # label = [cat] + center + axes + [0.0] #[sin_angle]
+
                     annots.append(label)
                 self.annotations.append(np.array(annots))
         except Exception as e:

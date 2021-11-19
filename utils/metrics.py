@@ -358,16 +358,23 @@ def sample_ellipse(axes, sin, center, points):
     M = R @ A @ R.T @ pts_centered.T
     return torch.einsum("ij,ji->i", pts_centered, M)
 
-def ellipses_sampling_distance(boxes1, boxes2):
-    range_x = [-2.0, 2.0]
-    range_y = [-2.0, 2.0]
-    sampling_x = 20
-    sampling_y = 20
+def ellipses_sampling_distance(boxes1, boxes2, angles1, angles2):
+    range_x = [-4.0, 4.0]
+    range_y = [-4.0, 4.0]
+    sampling_x = 10
+    sampling_y = 10
     points = generate_sampling_points(range_x, range_y, sampling_x, sampling_y)
     vals = []
-    for bb1, bb2 in zip(boxes1, boxes2):
+    # for bb1, bb2 in zip(boxes1, boxes2):
+    for i in range(boxes1.shape[0]):
+        bb1 = boxes1[i, :4]
+        bb2 = boxes2[i, :4]
+        # print(bb1, bb2)
+        # s1 = sample_ellipse(bb1[2:4]/2, angles1[i].reshape((1, 1)), bb1[:2], points)
+        # s2 = sample_ellipse(bb2[2:4]/2, angles2[i].reshape((1, 1)), bb2[:2], points)
         s1 = sample_ellipse(bb1[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb1[:2], points)
         s2 = sample_ellipse(bb2[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb2[:2], points)
-        vals.append((torch.sqrt(torch.sum((s1 - s2)**2)) / (sampling_x * sampling_y)).unsqueeze(0))
+        # vals.append((torch.sqrt(torch.sum((s1 - s2)**2)) / (sampling_x * sampling_y)).unsqueeze(0))
+        vals.append((torch.sum((s1 - s2)**2) / (sampling_x * sampling_y)).unsqueeze(0))
     return torch.mean(torch.cat(vals))
 

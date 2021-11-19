@@ -3,6 +3,7 @@
 Loss functions
 """
 
+from math import tan, pi
 import torch
 import torch.nn as nn
 
@@ -146,11 +147,26 @@ class ComputeLoss:
                 # the dimensions are multiplied by the anchors 
                 pxy = ps[:, :2].sigmoid() * 2. - 0.5
                 pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[i]
+                # pa = ps[:, 4:5].tanh() ####### sin(angle) because no arcsin
+                pa = ps[:, 4:5].sigmoid()*2-1 ####### sin(angle) because no arcsin
+                # pbox = torch.cat((pxy, pwh, pa), 1)  # predicted box
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
                 # print("pbox = ", pbox.shape)
                 # print("tbox[i] = ", tbox[i].shape)
                 iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
-                l_ell = ellipses_sampling_distance(pbox, tbox[i])
+                # l_ell = ellipses_sampling_distance(torch.cat((pbox, pa), 1), torch.cat((tbox[i], tangle[i]), 1))
+                # l_ell = ellipses_sampling_distance(pbox, torch.cat((tbox[i], tangle[i]), 1))
+                print(pa[:10])
+                print(tangle[i][:10])
+                l_ell = ellipses_sampling_distance(pbox, tbox[i], pa, torch.sin(tangle[i]))
+                l_a = torch.mean((pa - torch.sin(tangle[i]))**2)
+                # l_a =  torch.mean((pa-0.321)**2)
+                print(l_ell)
+                print(l_a)
+                l_ell += l_a
+
+                #l_ell = ellipses_sampling_distance(pbox, tbox[i])
+                #l_ell = ellipses_sampling_distance(torch.cat((pbox, pa), 1), torch.cat((tbox[i], tangle[i]), 1))
                 # print("=============> l_ell = ", l_ell)
                 # print("pbox shape:: ", pbox.shape)
                 # print("tbox shape::: ", tbox[i].shape)
@@ -267,9 +283,16 @@ class ComputeLoss:
             gij = (gxy - offsets).long()
             gi, gj = gij.T  # grid xy indices
             
+           # filter bad angles
+            sup = torch.where(t[:, 6] > pi/2)[0]
+            inf = torch.where(t[:, 6] < -pi/2)[0]
+            t[sup, 6] -= pi
+            t[inf, 6] += pi
+
+
 
             # Append
-            a = t[:, 6].long()  # anchor indices
+            a = t[:, 7].long()  # anchor indices
             indices.append((b, a, gj.clamp_(0, gain[3] - 1), gi.clamp_(0, gain[2] - 1)))  # image, anchor, grid indices
             tbox.append(torch.cat((gxy - gij, gwh), 1))  # box
             anch.append(anchors[a])  # anchors

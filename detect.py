@@ -142,8 +142,8 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     counter = -1
     for path, img, im0s, vid_cap in dataset:
         counter+=1
-        if counter % 5 != 0:
-            continue
+        # if counter % 5 != 0:
+        #     continue
         # Fill JSON info
         image_data = {}
         image_data["file_name"] = path
@@ -196,6 +196,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         t3 = time_sync()
         dt[1] += t3 - t2
 
+        # print(pred.shape)
         # NMS
         # print("BEFORE NMS ", pred.shape)
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
@@ -236,8 +237,10 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     n = (det[:, -1] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
+                # print(det)
                 # Write results
                 for *xyxy, angle, conf, cls in reversed(det):
+                    # print(angle)
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
@@ -248,7 +251,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         c = int(cls)  # integer class
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
                         # print(xyxy)
-                        annotator.box_label(xyxy, label, color=colors(c, True), angle=np.arcsin(angle.cpu().detach().numpy()))
+                        annotator.box_label(xyxy, label, color=colors(c, True), angle=angle.cpu().detach().numpy())
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
@@ -256,7 +259,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                     bbox = [float(x.cpu()) for x in xyxy]
                     axes = np.array([bbox[2] - bbox[0], bbox[3] - bbox[1]]) / 2
                     center = np.array([bbox[2] + bbox[0], bbox[3] + bbox[1]]) / 2
-                    angle = np.arcsin(angle.cpu().detach().numpy())
+                    angle = angle.cpu().detach().numpy()
                     ell = Ellipse.compose(axes, angle, center)
                     det_dict = {
                         "category_id": int(cls),
