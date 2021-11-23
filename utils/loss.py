@@ -8,6 +8,7 @@ import torch.nn as nn
 
 from utils.metrics import bbox_iou, ellipses_sampling_distance
 from utils.torch_utils import is_parallel
+from math import pi
 
 
 def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#issuecomment-598028441
@@ -146,12 +147,21 @@ class ComputeLoss:
                 # the dimensions are multiplied by the anchors 
                 pxy = ps[:, :2].sigmoid() * 2. - 0.5
                 pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[i]
-                pa = torch.arcsin(ps[:, 4].tanh()).reshape((-1, 1))
-                pbox = torch.cat((pxy, pwh, pa), 1)  # predicted box
+
+                pa = ps[:, 4:5].tanh()
+                pbox = torch.cat((pxy, pwh), 1)  # predicted box
                 # print("pbox = ", pbox.shape)
                 # print("tbox[i] = ", tbox[i].shape)
                 iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
-                l_ell = ellipses_sampling_distance(pbox, torch.cat((tbox[i], tangle[i]), 1))
+                # print(pa[:10, :])
+                # print(pbox.grad)
+
+                # l_ell = ellipses_sampling_distance(torch.cat((pbox, pa), 1), torch.cat((tbox[i], torch.sin(tangle[i])), 1))
+                
+                # l_ell = ellipses_sampling_distance(pbox, tbox[i])
+
+                # l_ell = ellipses_sampling_distance(pbox, tbox[i])
+                # l_ell = ellipses_sampling_distance(pbox, tbox[i])
                 # print("=============> l_ell = ", l_ell)
                 # print("pbox shape:: ", pbox.shape)
                 # print("tbox shape::: ", tbox[i].shape)
@@ -161,8 +171,9 @@ class ComputeLoss:
                 # lbox += aa + bb * 4
                 # lbox += torch.mean((pbox - tbox[i])**2) + torch.mean((ps[:, 4].tanh())**2)
 
-                # lbox += (1.0 - iou).mean()  # iou loss
-                lbox += l_ell
+                lbox += (1.0 - iou).mean()  # iou loss
+                # lbox += torch.mean(torch.abs(torch.sin(tangle[i]) - pa))
+                # lbox += l_ell
 
                 # Objectness
                 score_iou = iou.detach().clamp(0).type(tobj.dtype)
@@ -188,6 +199,9 @@ class ComputeLoss:
 
         if self.autobalance:
             self.balance = [x / self.balance[self.ssi] for x in self.balance]
+        # print("lbox: ", lbox, self.hyp['box'])
+        # print("lobj: ", lobj, self.hyp['obj'])
+        # print("lcls: ", lcls, self.hyp['cls'])
         lbox *= self.hyp['box']
         lobj *= self.hyp['obj']
         lcls *= self.hyp['cls']
@@ -267,10 +281,16 @@ class ComputeLoss:
             # print(gwh[:10, :])
             gij = (gxy - offsets).long()
             gi, gj = gij.T  # grid xy indices
-            
+
+            # filter bad angles
+            # sup = torch.where(t[:, 6] > pi/2)[0]
+            # inf = torch.where(t[:, 6] < -pi/2)[0]
+            # t[sup, 6] -= pi
+            # t[inf, 6] += pi
+
 
             # Append
-            a = t[:, 6].long()  # anchor indices
+            a = t[:, 7].long()  # anchor indices
             indices.append((b, a, gj.clamp_(0, gain[3] - 1), gi.clamp_(0, gain[2] - 1)))  # image, anchor, grid indices
             tbox.append(torch.cat((gxy - gij, gwh), 1))  # box
             anch.append(anchors[a])  # anchors

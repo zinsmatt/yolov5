@@ -69,7 +69,9 @@ class Detect(nn.Module):
 
                 # y = x[i].sigmoid()
                 aa=x[i][:, :, :, :, :4].sigmoid()
-                bb = torch.arcsin(x[i][:, :, :, :, 4:5].tanh())*0
+                # bb = torch.arcsin(x[i][:, :, :, :, 4:5].tanh())
+                # bb = torch.arcsin(x[i][:, :, :, :, 4:5].tanh())*0
+                bb = torch.arcsin(x[i][:, :, :, :, 4:5].sigmoid()*2-1)*0
                 cc = x[i][:, :, :, :, 5:].sigmoid()
                 # # print("aa ", aa.shape)
                 # # print("bb ", bb.shape)
@@ -78,8 +80,8 @@ class Detect(nn.Module):
 
                 # print("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx= ", x[i].shape)
                 # print("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyy= ", y.shape)
-                print("#"*100, self.stride[i])
-                print(self.grid[i].shape)
+                # print("#"*100, self.stride[i])
+                # print(self.grid[i].shape)
 
                 # self.grid[i] contains the coordinates of the cells in the grid
                 if self.inplace:

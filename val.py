@@ -66,7 +66,7 @@ def process_batch(detections, labels, iouv):
         correct (Array[N, 10]), for 10 IoU levels
     """
     correct = torch.zeros(detections.shape[0], iouv.shape[0], dtype=torch.bool, device=iouv.device)
-    iou = box_iou(labels[:, 1:], detections[:, :4])
+    iou = box_iou(labels[:, 1:5], detections[:, :4])
     x = torch.where((iou >= iouv[0]) & (labels[:, 0:1] == detections[:, 6]))  # IoU above threshold and classes match
     if x[0].shape[0]:
         matches = torch.cat((torch.stack(x, 1), iou[x[0], x[1]][:, None]), 1).cpu().numpy()  # [label, detection, iou]
@@ -187,6 +187,8 @@ def run(data,
         out = non_max_suppression(out, conf_thres, iou_thres, labels=lb, multi_label=True, agnostic=single_cls)
         dt[2] += time_sync() - t3
 
+        # print(out)
+        # print("out ", len(out))
         # Statistics per image
         for si, pred in enumerate(out):
             labels = targets[targets[:, 0] == si, 1:]
@@ -200,6 +202,8 @@ def run(data,
             seen += 1
 
             if len(pred) == 0:
+                # print("pred zero")
+                # print("nl = ", nl)
                 if nl:
                     stats.append((torch.zeros(0, niou, dtype=torch.bool), torch.Tensor(), torch.Tensor(), tcls))
                 continue
@@ -258,6 +262,9 @@ def run(data,
     print(pf % ('all', seen, nt.sum(), mp, mr, map50, map))
 
     # Print results per class
+    # print(stats)
+    # print(nc)
+    # print(ap_class)
     if (verbose or (nc < 50 and not training)) and nc > 1 and len(stats):
         for i, c in enumerate(ap_class):
             print(pf % (names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i]))

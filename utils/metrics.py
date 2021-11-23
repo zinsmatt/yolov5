@@ -47,6 +47,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names
         i = pred_cls == c
         n_l = (target_cls == c).sum()  # number of labels
         n_p = i.sum()  # number of predictions
+        # print("unique class ", n_l, n_p)
 
         if n_p == 0 or n_l == 0:
             continue
@@ -358,18 +359,43 @@ def sample_ellipse(axes, sin, center, points):
     M = R @ A @ R.T @ pts_centered.T
     return torch.einsum("ij,ji->i", pts_centered, M)
 
+
+IDX = 0
+def save_sampling(pts, values, name):
+    n = int(np.sqrt(pts.shape[0]))
+    I = values.reshape((n, n)).cpu().detach().numpy().astype(float)
+    plt.imshow(I)
+    plt.colorbar()
+    global IDX
+    # plt.show()
+    plt.savefig("/home/mzins/dev/yolov5/runs/debug/ell_%08d_" % IDX + name + ".png" )
+    plt.close("all")
+    IDX += 1
+
+range_x = [-2.0, 2.0]
+range_y = [-2.0, 2.0]
+sampling_x = 20
+sampling_y = 20
+points = generate_sampling_points(range_x, range_y, sampling_x, sampling_y)
+
+IIDX = 0
+
 def ellipses_sampling_distance(boxes1, boxes2):
-    range_x = [-2.0, 2.0]
-    range_y = [-2.0, 2.0]
-    sampling_x = 20
-    sampling_y = 20
-    points = generate_sampling_points(range_x, range_y, sampling_x, sampling_y)
+    # print(boxes1.shape, boxes2.shape)
+    global points, IIDX
     vals = []
+    # print(boxes1[:5, :])
     for bb1, bb2 in zip(boxes1, boxes2):
-        s1 = sample_ellipse(bb1[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb1[:2], points)
-        s2 = sample_ellipse(bb2[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb2[:2], points)
-        # s1 = sample_ellipse(bb1[2:4]/2, bb1[4].reshape((1, 1)), bb1[:2], points)
-        # s2 = sample_ellipse(bb2[2:4]/2, bb2[4].reshape((1, 1)), bb2[:2], points)
-        vals.append((torch.sqrt(torch.sum((s1 - s2)**2)) / (sampling_x * sampling_y)).unsqueeze(0))
-    return torch.mean(torch.cat(vals))
+        # s1 = sample_ellipse(bb1[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb1[:2], points)
+        # s2 = sample_ellipse(bb2[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb2[:2], points)
+        s1 = sample_ellipse(bb1[2:4]/2, bb1[4].reshape((1, 1)), bb1[:2], points)
+        s2 = sample_ellipse(bb2[2:4]/2, bb2[4].reshape((1, 1)), bb2[:2], points)
+        vals.append(torch.sqrt((torch.sum((s1 - s2)**2) / (sampling_x * sampling_y))).unsqueeze(0))
+        if IIDX % 50000 == 0:
+            save_sampling(points.T, s1, "s1")
+            save_sampling(points.T, s2, "s2")
+        IIDX += 1
+
+    l =  torch.mean(torch.cat(vals))
+    return l
 

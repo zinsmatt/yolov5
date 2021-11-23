@@ -141,9 +141,9 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     dt, seen = [0.0, 0.0, 0.0], 0
     counter = -1
     for path, img, im0s, vid_cap in dataset:
-        counter+=1
-        if counter % 5 != 0:
-            continue
+        # counter+=1
+        # if counter % 5 != 0:
+        #     continue
         # Fill JSON info
         image_data = {}
         image_data["file_name"] = path
