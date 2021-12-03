@@ -431,7 +431,10 @@ class LoadImagesAndLabels(Dataset):
         try:
             with open(json_dataset, "r") as fin:
                 json_data = json.load(fin)
-            self.img_files = [data["file_name"] for data in json_data][:1000] ###################### LIMIT SIZE
+            if "test" in json_dataset:
+                self.img_files = [data["file_name"] for data in json_data][:300] ###################### LIMIT SIZE
+            else:
+                self.img_files = [data["file_name"] for data in json_data]#[:1500] ###################### LIMIT SIZE
             self.annotations = []
             for fi, f in enumerate(self.img_files):
                 data = json_data[fi]
@@ -443,15 +446,15 @@ class LoadImagesAndLabels(Dataset):
                     cat = det["object_id"]
                     # ell = det["ellipse"]
 
-                    ## bbox 
-                    x1, y1, x2, y2 = det["bbox"]
-                    center = [(x1 + x2) / 2, (y1 + y2) / 2]
-                    axes = [(x2 - x1), (y2 - y1)] # for now the network wants to receive xywh
-                    center[0] /= w
-                    center[1] /= h
-                    axes[0] /= w
-                    axes[1] /= h
-                    label = [cat] + center + axes + [0.0] #[sin_angle]
+                    # ## bbox 
+                    # x1, y1, x2, y2 = det["bbox"]
+                    # center = [(x1 + x2) / 2, (y1 + y2) / 2]
+                    # axes = [(x2 - x1), (y2 - y1)] # for now the network wants to receive xywh
+                    # center[0] /= w
+                    # center[1] /= h
+                    # axes[0] /= w
+                    # axes[1] /= h
+                    # label = [cat] + center + axes + [0.0] #[sin_angle]
 
                     # if np.any(np.array(label[:-1]) < 0):
                     #     print("="*100)
@@ -459,14 +462,14 @@ class LoadImagesAndLabels(Dataset):
                     #     print("="*100)
 
                     # ellipses
-                    # ell = det["ellipse"]
-                    # axes = np.asarray(ell["axes"]) * 2
-                    # center = np.asarray(ell["center"])
-                    # center[0] /= w
-                    # center[1] /= h
-                    # axes[0] /= w
-                    # axes[1] /= h
-                    # label = [cat] + center.tolist() + axes.tolist() + [ell["angle"]]
+                    ell = det["ellipse"]
+                    axes = np.asarray(ell["axes"]) * 2
+                    center = np.asarray(ell["center"])
+                    center[0] /= w
+                    center[1] /= h
+                    axes[0] /= w
+                    axes[1] /= h
+                    label = [cat] + center.tolist() + axes.tolist() + [ell["angle"]]
 
                     annots.append(label)
                 self.annotations.append(np.array(annots))

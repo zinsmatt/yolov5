@@ -10,6 +10,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch.nn as nn
 
 
 def fitness(x):
@@ -351,7 +352,8 @@ def generate_sampling_points(range_x, range_y, sampling_x, sampling_y):
 
 def sample_ellipse(axes, sin, center, points):
     A = torch.diag(axes)
-    cos = torch.sqrt(1 - sin**2)
+    epsilon = 1.e-3
+    cos = torch.sqrt(1 - sin**2 + epsilon)
     R = torch.cat((torch.cat((cos, -sin), dim=1),
                     torch.cat((sin, cos), dim=1)), dim=0)
     
@@ -376,26 +378,58 @@ range_x = [-2.0, 2.0]
 range_y = [-2.0, 2.0]
 sampling_x = 20
 sampling_y = 20
+N = sampling_x * sampling_y
 points = generate_sampling_points(range_x, range_y, sampling_x, sampling_y)
 
 IIDX = 0
 
+# def ellipses_sampling_distance(boxes1, boxes2):
+#     # print(boxes1.shape, boxes2.shape)
+#     global points, IIDX, N
+#     vals = []
+#     # print(boxes1[:5, :])
+#     for bb1, bb2 in zip(boxes1, boxes2):
+#         # s1 = sample_ellipse(bb1[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb1[:2], points)
+#         # s2 = sample_ellipse(bb2[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb2[:2], points)
+#         s1 = sample_ellipse(bb1[2:4]/2, bb1[4].reshape((1, 1)), bb1[:2], points)
+#         s2 = sample_ellipse(bb2[2:4]/2, bb2[4].reshape((1, 1)), bb2[:2], points)
+#         # vals.append(torch.sqrt((torch.sum((s1 - s2)**2) / (sampling_x * sampling_y))).unsqueeze(0))
+#         # vals.append((torch.sum(torch.abs(s1 - s2)) / N).unsqueeze(0))
+#         vals.append((torch.sum((s1 - s2)**2) / N).unsqueeze(0))
+#         if IIDX % 50000 == 0:
+#             save_sampling(points.T, s1, "s1")
+#             save_sampling(points.T, s2, "s2")
+#         IIDX += 1
+
+#     l =  torch.mean(torch.cat(vals))
+#     return l
+
+
+
 def ellipses_sampling_distance(boxes1, boxes2):
     # print(boxes1.shape, boxes2.shape)
-    global points, IIDX
+    global points, IIDX, N
     vals = []
+    # S1, S2 = [], []
     # print(boxes1[:5, :])
     for bb1, bb2 in zip(boxes1, boxes2):
         # s1 = sample_ellipse(bb1[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb1[:2], points)
         # s2 = sample_ellipse(bb2[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb2[:2], points)
         s1 = sample_ellipse(bb1[2:4]/2, bb1[4].reshape((1, 1)), bb1[:2], points)
         s2 = sample_ellipse(bb2[2:4]/2, bb2[4].reshape((1, 1)), bb2[:2], points)
-        vals.append(torch.sqrt((torch.sum((s1 - s2)**2) / (sampling_x * sampling_y))).unsqueeze(0))
+        # vals.append(torch.sqrt((torch.sum((s1 - s2)**2) / (sampling_x * sampling_y))).unsqueeze(0))
+        # vals.append((torch.sum(torch.abs(s1 - s2)) / N).unsqueeze(0))
+
+        vals.append((s1 - s2)**2)
+        # S1.append(s1)
+        # S2.append(s2)
+
+        # vals.append(torch.abs(s1 - s2))
         if IIDX % 50000 == 0:
             save_sampling(points.T, s1, "s1")
             save_sampling(points.T, s2, "s2")
         IIDX += 1
-
     l =  torch.mean(torch.cat(vals))
+    # l = nn.SmoothL1Loss(reduction="mean")(torch.cat(S1), torch.cat(S2))
     return l
 

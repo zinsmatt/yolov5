@@ -9,6 +9,7 @@ import torch.nn as nn
 from utils.metrics import bbox_iou, ellipses_sampling_distance
 from utils.torch_utils import is_parallel
 from math import pi
+import numpy as np
 
 
 def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#issuecomment-598028441
@@ -114,8 +115,9 @@ class ComputeLoss:
         self.BCEcls, self.BCEobj, self.gr, self.hyp, self.autobalance = BCEcls, BCEobj, 1.0, h, autobalance
         for k in 'na', 'nc', 'nl', 'anchors':
             setattr(self, k, getattr(det, k))
+        self.DEBUG = []
 
-    def __call__(self, p, targets):  # predictions, targets, model
+    def __call__(self, p, targets, epoch=-1):  # predictions, targets, model
         # print("NC = ", self.nc)
         # print("predictions size = ", len(p))
         # print(p[0].shape, p[1].shape, p[2].shape)
@@ -129,7 +131,8 @@ class ComputeLoss:
         # print(tangle[0].shape)
         # print(len(indices), len(indices[0]), indices[0][0].shape)
         # print(anchors[0].shape)
-
+        # if epoch != -1:
+        #     print("===========================>", epoch)
         # Losses
         for i, pi in enumerate(p):  # layer index, layer predictions
             b, a, gj, gi = indices[i]  # image, anchor, gridy, gridx
@@ -148,6 +151,7 @@ class ComputeLoss:
                 pxy = ps[:, :2].sigmoid() * 2. - 0.5
                 pwh = (ps[:, 2:4].sigmoid() * 2) ** 2 * anchors[i]
 
+                # pa = ps[:, 4:5].sigmoid() * 2 - 1.0#.tanh()
                 pa = ps[:, 4:5].tanh()
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
                 # print("pbox = ", pbox.shape)
@@ -156,7 +160,9 @@ class ComputeLoss:
                 # print(pa[:10, :])
                 # print(pbox.grad)
 
-                # l_ell = ellipses_sampling_distance(torch.cat((pbox, pa), 1), torch.cat((tbox[i], torch.sin(tangle[i])), 1))
+                l_ell = ellipses_sampling_distance(torch.cat((pbox, pa), 1), torch.cat((tbox[i], torch.sin(tangle[i])), 1))
+
+                # lbox += torch.mean(torch.sum((pbox - tbox[i])**2, dim=1))
                 
                 # l_ell = ellipses_sampling_distance(pbox, tbox[i])
 
@@ -171,20 +177,32 @@ class ComputeLoss:
                 # lbox += aa + bb * 4
                 # lbox += torch.mean((pbox - tbox[i])**2) + torch.mean((ps[:, 4].tanh())**2)
 
-                lbox += (1.0 - iou).mean()  # iou loss
-                # lbox += torch.mean(torch.abs(torch.sin(tangle[i]) - pa))
-                # lbox += l_ell
+                # lbox += (1.0 - iou).mean()  # iou loss
+                # lbox += torch.mean(torch.abs((pbox-tbox[i])))
+                # pbox.register_hook(lambda grad: print(grad))
+                # pa.register_hook(lambda grad: print(grad))
+
+                # if epoch >= 10:
+                #     lbox += l_ell*0.1 #0.0001
+
+                # lbox += torch.mean((torch.sin(tangle[i]) - pa)**2)
+                # lbox += l_ell * 0.0001
+                # lbox += l_ell * 0.1
+                # lbox += l_ell * 0.025  # 0.025
+                
+                # lbox += l_ell * 0.0125  # 0.025
+                lbox += l_ell
 
                 # Objectness
                 score_iou = iou.detach().clamp(0).type(tobj.dtype)
                 if self.sort_obj_iou:
                     sort_id = torch.argsort(score_iou)
                     b, a, gj, gi, score_iou = b[sort_id], a[sort_id], gj[sort_id], gi[sort_id], score_iou[sort_id]
-                tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * score_iou  # iou ratio
+                tobj[b, a, gj, gi] = (1.0 - self.gr) + self.gr * score_iou  # iou ratio ([mz] used as gt label for conf)
 
                 # Classification
                 if self.nc > 1:  # cls loss (only if multiple classes)
-                    t = torch.full_like(ps[:, 6:], self.cn, device=device)  # targets
+                    t = torch.full_like(ps[:, 6:], self.cn, device=device)  # targets ([mz] logits with self.cn/self.cp for negative/positive)
                     t[range(n), tcls[i]] = self.cp
                     lcls += self.BCEcls(ps[:, 6:], t)  # BCE
 
@@ -192,7 +210,7 @@ class ComputeLoss:
                 # with open('targets.txt', 'a') as file:
                 #     [file.write('%11.5g ' * 4 % tuple(x) + '\n') for x in torch.cat((txy[i], twh[i]), 1)]
 
-            obji = self.BCEobj(pi[..., 5], tobj)
+            obji = self.BCEobj(pi[..., 5], tobj) # loss for confidence between the predicted conf pi and the iou ratio tobj
             lobj += obji * self.balance[i]  # obj loss
             if self.autobalance:
                 self.balance[i] = self.balance[i] * 0.9999 + 0.0001 / obji.detach().item()
@@ -205,6 +223,9 @@ class ComputeLoss:
         lbox *= self.hyp['box']
         lobj *= self.hyp['obj']
         lcls *= self.hyp['cls']
+        # print(lobj)
+        # self.DEBUG.append(lobj.cpu().detach().numpy())
+
         bs = tobj.shape[0]  # batch size
 
         return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls)).detach()
@@ -245,8 +266,14 @@ class ComputeLoss:
             if nt:
 
                 # [mz] First filtering
+                # print("t = ", t[:, :, 4:6])
+                # print("anchors = ", anchors[:, None])
+                # print("t = ", t[:, :, 4:6].shape)
+                # print("anchors = ", anchors[:, None].shape)
+
                 # Matches
                 r = t[:, :, 4:6] / anchors[:, None]  # wh ratio
+                # print("r = ", r.shape)
                 # print("anchors[:, None] = ", anchors[:, None])
                 # print(t.shape)
                 # print(anchors.shape)
@@ -283,10 +310,10 @@ class ComputeLoss:
             gi, gj = gij.T  # grid xy indices
 
             # filter bad angles
-            # sup = torch.where(t[:, 6] > pi/2)[0]
-            # inf = torch.where(t[:, 6] < -pi/2)[0]
-            # t[sup, 6] -= pi
-            # t[inf, 6] += pi
+            sup = torch.where(t[:, 6] > pi/2)[0]
+            inf = torch.where(t[:, 6] < -pi/2)[0]
+            t[sup, 6] -= pi
+            t[inf, 6] += pi
 
 
             # Append
@@ -310,3 +337,6 @@ class ComputeLoss:
             # print("anch = ", anch)
 
         return tcls, tbox, tangle, indices, anch
+
+    def save_DEBUG(self):
+        np.savetxt("/home/mzins/dev/yolov5/runs/debug.txt", self.DEBUG)
