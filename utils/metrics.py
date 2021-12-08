@@ -134,7 +134,7 @@ class ConfusionMatrix:
         detections = detections[detections[:, 5] > self.conf]
         gt_classes = labels[:, 0].int()
         detection_classes = detections[:, 6].int()
-        iou = box_iou(labels[:, 1:], detections[:, :4])
+        iou = box_iou(labels[:, 1:5], detections[:, :4])
 
         x = torch.where(iou > self.iou_thres)
         if x[0].shape[0]:
@@ -192,6 +192,8 @@ class ConfusionMatrix:
 
 
 def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
+    # print("box1: ", box1.shape)
+    # print("box2: ", box2.shape)
     # Returns the IoU of box1 to box2. box1 is 4, box2 is nx4
     # print("# "*40, box1.shape)
     # print("# "*40, box2.shape)
@@ -361,6 +363,25 @@ def sample_ellipse(axes, sin, center, points):
     M = R @ A @ R.T @ pts_centered.T
     return torch.einsum("ij,ji->i", pts_centered, M)
 
+def sample_ellipse_binary(axes, sin, center, points):
+    A = torch.diag(torch.reciprocal(axes**2))
+    epsilon = 1.e-3
+    cos = torch.sqrt(1 - sin**2 + epsilon)
+    R = torch.cat((torch.cat((cos, -sin), dim=1),
+                    torch.cat((sin, cos), dim=1)), dim=0)
+    
+    pts_centered = points.T - center
+    M = R @ A @ R.T @ pts_centered.T
+    values = torch.einsum("ij,ji->i", pts_centered, M)
+    return values
+    # print(values[:5])
+    # iou =  (values <= 1).float()
+    # print(iou[:5])
+    # return iou
+    
+
+
+
 
 IDX = 0
 def save_sampling(pts, values, name):
@@ -417,6 +438,9 @@ def ellipses_sampling_distance(boxes1, boxes2):
         # s2 = sample_ellipse(bb2[2:4]/2, torch.zeros([1, 1], device=torch.device('cuda:0')), bb2[:2], points)
         s1 = sample_ellipse(bb1[2:4]/2, bb1[4].reshape((1, 1)), bb1[:2], points)
         s2 = sample_ellipse(bb2[2:4]/2, bb2[4].reshape((1, 1)), bb2[:2], points)
+
+        # s1 = sample_ellipse_binary(bb1[2:4]/2, bb1[4].reshape((1, 1)), bb1[:2], points)
+        # s2 = sample_ellipse_binary(bb2[2:4]/2, bb2[4].reshape((1, 1)), bb2[:2], points)
         # vals.append(torch.sqrt((torch.sum((s1 - s2)**2) / (sampling_x * sampling_y))).unsqueeze(0))
         # vals.append((torch.sum(torch.abs(s1 - s2)) / N).unsqueeze(0))
 
@@ -425,7 +449,7 @@ def ellipses_sampling_distance(boxes1, boxes2):
         # S2.append(s2)
 
         # vals.append(torch.abs(s1 - s2))
-        if IIDX % 50000 == 0:
+        if IIDX % 5000000000 == 0:
             save_sampling(points.T, s1, "s1")
             save_sampling(points.T, s2, "s2")
         IIDX += 1
@@ -433,3 +457,138 @@ def ellipses_sampling_distance(boxes1, boxes2):
     # l = nn.SmoothL1Loss(reduction="mean")(torch.cat(S1), torch.cat(S2))
     return l
 
+
+
+# def sqrtm(m):
+#     evals, evecs = torch.linalg.eig(m)
+#     evals = evals.real
+#     evecs = evecs.real
+#     # evals = evals[:, 0]                               # get real part of (real) eigenvalues
+#     # rebuild original matrix
+#     # mchk = torch.matmul(evecs, torch.matmul(torch.diag(evals), torch.inverse(evecs)))
+#     # mchk - m                                           # check decomposition
+#     evpow = evals**(0.5)                              # raise eigenvalues to fractional power
+#     # build exponentiated matrix from exponentiated eigenvalues
+#     mpow = torch.matmul(evecs, torch.matmul(torch.diag(evpow), torch.inverse(evecs)))
+#     return mpow
+
+from torch.autograd import Function
+import numpy as np
+import scipy.linalg
+
+class MatrixSquareRoot(Function):
+    """Square root of a positive definite matrix.
+
+    NOTE: matrix square root is not differentiable for matrices with
+          zero eigenvalues.
+    """
+    @staticmethod
+    def forward(ctx, input):
+        m = input.detach().cpu().numpy().astype(np.float_)
+        sqrtm = torch.from_numpy(scipy.linalg.sqrtm(m).real).to(input)
+        ctx.save_for_backward(sqrtm)
+        return sqrtm
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        grad_input = None
+        if ctx.needs_input_grad[0]:
+            sqrtm, = ctx.saved_tensors
+            sqrtm = sqrtm.data.cpu().numpy().astype(np.float_)
+            gm = grad_output.data.cpu().numpy().astype(np.float_)
+
+            # Given a positive semi-definite matrix X,
+            # since X = X^{1/2}X^{1/2}, we can compute the gradient of the
+            # matrix square root dX^{1/2} by solving the Sylvester equation:
+            # dX = (d(X^{1/2})X^{1/2} + X^{1/2}(dX^{1/2}).
+            grad_sqrtm = scipy.linalg.solve_sylvester(sqrtm, sqrtm, gm)
+
+            grad_input = torch.from_numpy(grad_sqrtm).to(grad_output)
+        return grad_input
+sqrtm = MatrixSquareRoot.apply
+
+def wasserstein_distance(ellipses1, ellipses2):
+    vals = torch.sum((ellipses1[:, :2]-ellipses2[:, :2])**2)
+    epsilon = 1.e-3
+    for ell1, ell2 in zip(ellipses1, ellipses2):
+        A1 = torch.diag((ell1[2:4]/2)**2)
+        sin1 = ell1[4].reshape((1, 1))
+        cos1 =  torch.sqrt(1 - sin1**2 + epsilon)
+        R1 = torch.cat((torch.cat((cos1, -sin1), dim=1),
+                        torch.cat((sin1, cos1), dim=1)), dim=0)
+        Q1 =  (R1 @ A1 @ R1.T).float()
+
+        A2 = torch.diag((ell2[2:4]/2)**2)
+        sin2 = ell2[4].reshape((1, 1))
+        cos2 =  torch.sqrt(1 - sin2**2 + epsilon)
+        R2 = torch.cat((torch.cat((cos2, -sin2), dim=1),
+                        torch.cat((sin2, cos2), dim=1)), dim=0)
+        Q2 =  (R2 @ A2 @ R2.T).float()
+        sqrtmQ2 = sqrtm(Q2).float()
+        a = sqrtm((sqrtmQ2 @ Q1 @ sqrtmQ2).float())
+        vals += torch.trace(Q1 + Q2  - 2* a.float()).float()
+    return vals / ellipses1.shape[0]
+
+
+from ellcv.utils import cpp #compute_ellipses_iou, 
+from ellcv.types import Ellipse, ellipse
+
+def ellipses_iou_no_grad(ellipses1, ellipses2):
+    """
+        Compute the IoU between two ellipses
+    Arguments:
+        ellipses1 (Tensor[N, 5]): [x y w h angle]
+        ellipses2 (Tensor[M, 5])
+    Returns:
+        iou (Tensor[N, M]): the NxM matrix containing the pairwise
+            IoU values for every element in boxes1 and boxes2
+    """
+    # print(ellipses1[:2,:])
+    # print(ellipses2[:2,:])
+    ious = torch.zeros((ellipses1.shape[0], ellipses2.shape[0]))
+    for i, ell1 in enumerate(ellipses1):
+        for j, ell2 in enumerate(ellipses2):
+            # e1 = Ellipse.compose(ell1[2:4]/2, ell1[4], ell1[:2])
+            # e2 = Ellipse.compose(ell2[2:4]/2, ell2[4], ell2[:2])
+            # print(ell1)
+            # print(ell2)
+            ious[i, j] = cpp.compute_ellipses_iou(ell1, ell2)
+            # ious[i, j] = compute_ellipses_iou(e1, e2)
+    return ious
+
+def ellipses_iou_no_grad_list(ellipses1, ellipses2):
+    """
+        Compute the IoU between two ellipses
+    Arguments:
+        ellipses1 (Tensor[N, 5]): [x y w h angle]
+        ellipses2 (Tensor[N, 5])
+    Returns:
+        iou (Tensor[N]): the N pairwaise IoUs
+    """
+    # print(ellipses1.shape)
+    # print(ellipses2.shape)
+    ious = torch.zeros((ellipses1.shape[0]))
+    for i in range(ellipses1.shape[0]):
+        ious[i] = cpp.compute_ellipses_iou(ellipses1[i, :], ellipses2[i, :])
+    return ious
+
+def bhattacharyya_distance(ellipses1, ellipses2):
+    vals = torch.sum((ellipses1[:, :2]-ellipses2[:, :2])**2)
+    epsilon = 1.e-3
+    for ell1, ell2 in zip(ellipses1, ellipses2):
+        A1 = torch.diag((ell1[2:4]/2)**2)
+        sin1 = ell1[4].reshape((1, 1))
+        cos1 =  torch.sqrt(1 - sin1**2 + epsilon)
+        R1 = torch.cat((torch.cat((cos1, -sin1), dim=1),
+                        torch.cat((sin1, cos1), dim=1)), dim=0)
+        Q1 =  (R1 @ A1 @ R1.T).float()
+
+        A2 = torch.diag((ell2[2:4]/2)**2)
+        sin2 = ell2[4].reshape((1, 1))
+        cos2 =  torch.sqrt(1 - sin2**2 + epsilon)
+        R2 = torch.cat((torch.cat((cos2, -sin2), dim=1),
+                        torch.cat((sin2, cos2), dim=1)), dim=0)
+        Q2 =  (R2 @ A2 @ R2.T).float()
+        Q = 0.5 * (Q1 + Q2)
+        vals += 0.5 * torch.log(torch.linalg.det(Q) / torch.sqrt(torch.linalg.det(Q1)*torch.linalg.det(Q2) + epsilon))
+    return vals / ellipses1.shape[0]

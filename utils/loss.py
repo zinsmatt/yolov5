@@ -6,7 +6,7 @@ Loss functions
 import torch
 import torch.nn as nn
 
-from utils.metrics import bbox_iou, ellipses_sampling_distance
+from utils.metrics import bbox_iou, ellipses_sampling_distance, wasserstein_distance, bhattacharyya_distance, ellipses_iou_no_grad_list
 from utils.torch_utils import is_parallel
 from math import pi
 import numpy as np
@@ -156,12 +156,20 @@ class ComputeLoss:
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
                 # print("pbox = ", pbox.shape)
                 # print("tbox[i] = ", tbox[i].shape)
+
+
                 iou = bbox_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True)  # iou(prediction, target)
+
+                # iou = ellipses_iou_no_grad_list(torch.cat((pbox[:, 2:4]/2, torch.arcsin(pa), pbox[:, :2]), 1).detach().cpu().numpy(),
+                #                                 torch.cat((tbox[i][:, 2:4]/2, tangle[i], tbox[i][:, :2]), 1).detach().cpu().numpy()).to(device)
+                # print("iou: ", iou.shape)
+
                 # print(pa[:10, :])
                 # print(pbox.grad)
 
-                l_ell = ellipses_sampling_distance(torch.cat((pbox, pa), 1), torch.cat((tbox[i], torch.sin(tangle[i])), 1))
-
+                # l_ell = ellipses_sampling_distance(torch.cat((pbox, pa), 1), torch.cat((tbox[i], torch.sin(tangle[i])), 1))
+                # l_ell = wasserstein_distance(torch.cat((pbox, pa), 1), torch.cat((tbox[i], torch.sin(tangle[i])), 1))
+                # l_ell = bhattacharyya_distance(torch.cat((pbox, pa), 1), torch.cat((tbox[i], torch.sin(tangle[i])), 1))
                 # lbox += torch.mean(torch.sum((pbox - tbox[i])**2, dim=1))
                 
                 # l_ell = ellipses_sampling_distance(pbox, tbox[i])
@@ -177,21 +185,21 @@ class ComputeLoss:
                 # lbox += aa + bb * 4
                 # lbox += torch.mean((pbox - tbox[i])**2) + torch.mean((ps[:, 4].tanh())**2)
 
-                # lbox += (1.0 - iou).mean()  # iou loss
+                lbox += (1.0 - iou).mean()  # iou loss
                 # lbox += torch.mean(torch.abs((pbox-tbox[i])))
-                # pbox.register_hook(lambda grad: print(grad))
                 # pa.register_hook(lambda grad: print(grad))
 
                 # if epoch >= 10:
                 #     lbox += l_ell*0.1 #0.0001
 
-                # lbox += torch.mean((torch.sin(tangle[i]) - pa)**2)
+                lbox += torch.mean((torch.sin(tangle[i]) - pa)**2)
                 # lbox += l_ell * 0.0001
                 # lbox += l_ell * 0.1
-                # lbox += l_ell * 0.025  # 0.025
-                
+                # lbox += l_ell * 0.05  # 0.025
+                # lbox += l_ell
                 # lbox += l_ell * 0.0125  # 0.025
-                lbox += l_ell
+                # lbox += l_ell * 0.1# * 0.025
+                # pbox.register_hook(lambda grad: print(grad))
 
                 # Objectness
                 score_iou = iou.detach().clamp(0).type(tobj.dtype)

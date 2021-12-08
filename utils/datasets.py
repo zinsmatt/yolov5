@@ -434,7 +434,7 @@ class LoadImagesAndLabels(Dataset):
             if "test" in json_dataset:
                 self.img_files = [data["file_name"] for data in json_data][:300] ###################### LIMIT SIZE
             else:
-                self.img_files = [data["file_name"] for data in json_data]#[:1500] ###################### LIMIT SIZE
+                self.img_files = [data["file_name"] for data in json_data]#[:24]##[:1500] ###################### LIMIT SIZE
             self.annotations = []
             for fi, f in enumerate(self.img_files):
                 data = json_data[fi]

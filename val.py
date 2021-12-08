@@ -28,7 +28,7 @@ from utils.datasets import create_dataloader
 from utils.general import coco80_to_coco91_class, check_dataset, check_img_size, check_requirements, \
     check_suffix, check_yaml, box_iou, non_max_suppression, scale_coords, xyxy2xywh, xywh2xyxy, set_logging, \
     increment_path, colorstr, print_args
-from utils.metrics import ap_per_class, ConfusionMatrix
+from utils.metrics import ap_per_class, ConfusionMatrix, ellipses_iou_no_grad
 from utils.plots import output_to_target, plot_images, plot_val_study
 from utils.torch_utils import select_device, time_sync
 from utils.callbacks import Callbacks
@@ -66,7 +66,17 @@ def process_batch(detections, labels, iouv):
         correct (Array[N, 10]), for 10 IoU levels
     """
     correct = torch.zeros(detections.shape[0], iouv.shape[0], dtype=torch.bool, device=iouv.device)
-    iou = box_iou(labels[:, 1:5], detections[:, :4])
+    # print("labesl")
+    # print(labels.shape)
+    # print(labels[:3, :])
+    # print("detections")
+    # print(detections.shape)
+    # print(detections[:3, :])
+    # ioue = ellipsess_iou_no_grad(labels[:, 1:6], detections)
+    iou = ellipses_iou_no_grad(torch.cat((labels[:, 3:5]/2, labels[:, 5:6], labels[:, 1:3]), 1).cpu().numpy(),
+                               torch.cat((detections[:, 2:4]/2, detections[:, 4:5], detections[:, 0:2]), 1).cpu().numpy())
+    iou = iou.to(iouv.device)
+    # iou = box_iou(labels[:, 1:5], detections[:, :4])
     x = torch.where((iou >= iouv[0]) & (labels[:, 0:1] == detections[:, 6]))  # IoU above threshold and classes match
     if x[0].shape[0]:
         matches = torch.cat((torch.stack(x, 1), iou[x[0], x[1]][:, None]), 1).cpu().numpy()  # [label, detection, iou]
@@ -218,7 +228,7 @@ def run(data,
             if nl:
                 tbox = xywh2xyxy(labels[:, 1:5])  # target boxes
                 scale_coords(img[si].shape[1:], tbox, shape, shapes[si][1])  # native-space labels
-                labelsn = torch.cat((labels[:, 0:1], tbox), 1)  # native-space labels
+                labelsn = torch.cat((labels[:, 0:1], tbox, labels[:, 5:6]), 1)  # native-space labels
                 correct = process_batch(predn, labelsn, iouv)
                 if plots:
                     confusion_matrix.process_batch(predn, labelsn)
