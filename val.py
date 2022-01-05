@@ -73,10 +73,10 @@ def process_batch(detections, labels, iouv):
     # print(detections.shape)
     # print(detections[:3, :])
     # ioue = ellipsess_iou_no_grad(labels[:, 1:6], detections)
-    iou = ellipses_iou_no_grad(torch.cat((labels[:, 3:5]/2, labels[:, 5:6], labels[:, 1:3]), 1).cpu().numpy(),
-                               torch.cat((detections[:, 2:4]/2, detections[:, 4:5], detections[:, 0:2]), 1).cpu().numpy())
-    iou = iou.to(iouv.device)
-    # iou = box_iou(labels[:, 1:5], detections[:, :4])
+    # iou = ellipses_iou_no_grad(torch.cat((labels[:, 3:5]/2, labels[:, 5:6], labels[:, 1:3]), 1).cpu().numpy(),
+    #                            torch.cat((detections[:, 2:4]/2, detections[:, 4:5], detections[:, 0:2]), 1).cpu().numpy())
+    # iou = iou.to(iouv.device)
+    iou = box_iou(labels[:, 1:5], detections[:, :4])
     x = torch.where((iou >= iouv[0]) & (labels[:, 0:1] == detections[:, 6]))  # IoU above threshold and classes match
     if x[0].shape[0]:
         matches = torch.cat((torch.stack(x, 1), iou[x[0], x[1]][:, None]), 1).cpu().numpy()  # [label, detection, iou]

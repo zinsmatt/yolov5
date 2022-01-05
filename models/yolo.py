@@ -73,7 +73,7 @@ class Detect(nn.Module):
                 # bb = torch.arcsin(x[i][:, :, :, :, 4:5])
                 # bb = torch.arcsin(x[i][:, :, :, :, 4:5].tanh())*0
                 # bb = torch.arcsin(x[i][:, :, :, :, 4:5].sigmoid() * 2 - 1.0)
-                bb = torch.arcsin(x[i][:, :, :, :, 4:5].tanh())
+                bb = torch.arcsin(x[i][:, :, :, :, 4:5].tanh()) #*0
                 cc = x[i][:, :, :, :, 5:].sigmoid()
                 # # print("aa ", aa.shape)
                 # # print("bb ", bb.shape)

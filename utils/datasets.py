@@ -432,7 +432,7 @@ class LoadImagesAndLabels(Dataset):
             with open(json_dataset, "r") as fin:
                 json_data = json.load(fin)
             if "test" in json_dataset:
-                self.img_files = [data["file_name"] for data in json_data][:300] ###################### LIMIT SIZE
+                self.img_files = [data["file_name"] for data in json_data]#[::2]#[:300] ###################### LIMIT SIZE
             else:
                 self.img_files = [data["file_name"] for data in json_data]#[:24]##[:1500] ###################### LIMIT SIZE
             self.annotations = []
@@ -446,7 +446,7 @@ class LoadImagesAndLabels(Dataset):
                     cat = det["object_id"]
                     # ell = det["ellipse"]
 
-                    # ## bbox 
+                    # # ## bbox 
                     # x1, y1, x2, y2 = det["bbox"]
                     # center = [(x1 + x2) / 2, (y1 + y2) / 2]
                     # axes = [(x2 - x1), (y2 - y1)] # for now the network wants to receive xywh

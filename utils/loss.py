@@ -193,9 +193,10 @@ class ComputeLoss:
                 #     lbox += l_ell*0.1 #0.0001
 
                 lbox += torch.mean((torch.sin(tangle[i]) - pa)**2)
+
                 # lbox += l_ell * 0.0001
                 # lbox += l_ell * 0.1
-                # lbox += l_ell * 0.05  # 0.025
+                # lbox += l_ell * 0.025  # 0.025
                 # lbox += l_ell
                 # lbox += l_ell * 0.0125  # 0.025
                 # lbox += l_ell * 0.1# * 0.025
