@@ -1,4 +1,4 @@
-path: ./dataset
+path: ../yolov5/dataset
 train: ./train/images
 val: ./valid/images
 test: ./test/images

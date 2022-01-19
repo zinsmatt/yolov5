@@ -192,7 +192,7 @@ class ComputeLoss:
                 # if epoch >= 10:
                 #     lbox += l_ell*0.1 #0.0001
 
-                lbox += torch.mean((torch.sin(tangle[i]) - pa)**2)
+                # lbox += torch.mean((torch.sin(tangle[i]) - pa)**2)
 
                 # lbox += l_ell * 0.0001
                 # lbox += l_ell * 0.1

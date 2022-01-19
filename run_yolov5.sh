@@ -7,5 +7,5 @@
 
 # python detect.py --source /home/mzins/dev/3D-Aware-Ellipses-for-Visual-Localization/7-Scenes_Chess_dataset_test.json --weights runs/train/exp533/weights/best.pt --name TEST 
 # python detect.py --source /home/mzins/dev/3D-Aware-Ellipses-for-Visual-Localization/7-Scenes_Chess_dataset_test.json --weights runs/train/exp534/weights/best.pt --name TEST 
-python detect.py --source /home/mzins/dev/3D-Aware-Ellipses-for-Visual-Localization/7-Scenes_Chess_dataset_test.json --weights runs/train/exp535/weights/best.pt --name TEST 
+python detect.py --source /home/mzins/dev/3D-Aware-Ellipses-for-Visual-Localization/7-Scenes_Chess_dataset_test.json --weights runs/train/exp24/weights/best.pt --name TEST 
 

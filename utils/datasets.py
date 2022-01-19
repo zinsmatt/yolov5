@@ -442,19 +442,19 @@ class LoadImagesAndLabels(Dataset):
                 h = data["height"]
                 annots = []
                 for det in data["annotations"]:
-                    # cat = det["category_id"]
-                    cat = det["object_id"]
+                    cat = det["category_id"]
+                    # cat = det["object_id"]
                     # ell = det["ellipse"]
 
                     # # ## bbox 
-                    # x1, y1, x2, y2 = det["bbox"]
-                    # center = [(x1 + x2) / 2, (y1 + y2) / 2]
-                    # axes = [(x2 - x1), (y2 - y1)] # for now the network wants to receive xywh
-                    # center[0] /= w
-                    # center[1] /= h
-                    # axes[0] /= w
-                    # axes[1] /= h
-                    # label = [cat] + center + axes + [0.0] #[sin_angle]
+                    x1, y1, x2, y2 = det["bbox"]
+                    center = [(x1 + x2) / 2, (y1 + y2) / 2]
+                    axes = [(x2 - x1), (y2 - y1)] # for now the network wants to receive xywh
+                    center[0] /= w
+                    center[1] /= h
+                    axes[0] /= w
+                    axes[1] /= h
+                    label = [cat] + center + axes + [0.0] #[sin_angle]
 
                     # if np.any(np.array(label[:-1]) < 0):
                     #     print("="*100)
@@ -462,14 +462,14 @@ class LoadImagesAndLabels(Dataset):
                     #     print("="*100)
 
                     # ellipses
-                    ell = det["ellipse"]
-                    axes = np.asarray(ell["axes"]) * 2
-                    center = np.asarray(ell["center"])
-                    center[0] /= w
-                    center[1] /= h
-                    axes[0] /= w
-                    axes[1] /= h
-                    label = [cat] + center.tolist() + axes.tolist() + [ell["angle"]]
+                    # ell = det["ellipse"]
+                    # axes = np.asarray(ell["axes"]) * 2
+                    # center = np.asarray(ell["center"])
+                    # center[0] /= w
+                    # center[1] /= h
+                    # axes[0] /= w
+                    # axes[1] /= h
+                    # label = [cat] + center.tolist() + axes.tolist() + [ell["angle"]]
 
                     annots.append(label)
                 self.annotations.append(np.array(annots))
@@ -483,7 +483,7 @@ class LoadImagesAndLabels(Dataset):
         # Check cache
         self.label_files = img2label_paths(self.img_files)  # labels
         cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix('.cache') # initial
-        cache_path = Path("/home/mzins/dev/yolov5/dataset/train/labels.cache")
+        cache_path = Path("/home/mzins/dev/yolov5_bbox/dataset/labels.cache")
         try:
             cache, exists = np.load(cache_path, allow_pickle=True).item(), True  # load dict
             assert cache['version'] == self.cache_version  # same version
@@ -607,7 +607,7 @@ class LoadImagesAndLabels(Dataset):
         x['msgs'] = msgs  # warnings
         x['version'] = self.cache_version  # cache version
         try:
-            1/0 #################" Force no cache
+            # 1/0 #################" Force no cache
             np.save(path, x)  # save cache for next time
             path.with_suffix('.cache.npy').rename(path)  # remove .npy suffix
             logging.info(f'{prefix}New cache created: {path}')

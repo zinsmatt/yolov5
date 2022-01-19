@@ -222,20 +222,21 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     train_loader, dataset = create_dataloader(train_path, imgsz, batch_size // WORLD_SIZE, gs, single_cls,
                                               hyp=hyp, augment=True, cache=opt.cache, rect=opt.rect, rank=LOCAL_RANK,
                                               workers=workers, image_weights=opt.image_weights, quad=opt.quad,
-                                              prefix=colorstr('train: '), json_dataset="/home/mzins/dev/3D-Aware-Ellipses-for-Visual-Localization/7-Scenes_Chess_dataset_train_with_obj_annot.json")
+                                              prefix=colorstr('train: '), json_dataset="/media/mzins/DATA1/7-Scenes/chess/annotations_manual_seq_01_04_06/annotations_manual_seq_01_04_06_correct_path.json")
     mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
     nb = len(train_loader)  # number of batches
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
 
     ############### force no cache
     opt.cache = False
+    print("__________________________> nc = ", nc)
     
     # Process 0
     if RANK in [-1, 0]:
         val_loader = create_dataloader(val_path, imgsz, batch_size // WORLD_SIZE * 2, gs, single_cls,
                                        hyp=hyp, cache=None if noval else opt.cache, rect=True, rank=-1,
                                        workers=workers, pad=0.5,
-                                       prefix=colorstr('val: '), json_dataset="/home/mzins/dev/3D-Aware-Ellipses-for-Visual-Localization/7-Scenes_Chess_dataset_test_with_obj_annot.json")[0]
+                                       prefix=colorstr('val: '), json_dataset="/media/mzins/DATA1/7-Scenes/chess/annotations_manual_seq_01_04_06/annotations_manual_seq_01_04_06_correct_path.json")[0]
 
         if not resume:
             labels = np.concatenate(dataset.labels, 0)
