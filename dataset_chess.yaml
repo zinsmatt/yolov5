@@ -1,0 +1,11 @@
+# Classes
+nc: 7  # number of classes
+train: "/media/mzins/DATA1/7-Scenes/chess/annotations_manual_seq_01_04_06/annotations_manual_seq_01_04_06_correct_path.json"
+val: "/media/mzins/DATA1/7-Scenes/chess/annotations_manual_seq_01_04_06/annotations_manual_seq_01_04_06_correct_path.json"
+names: ["TV",
+        "Xbox",
+        "Chair",
+        "Timer",
+        "Games",
+        "Interruptor",
+        "Gamepad"]
