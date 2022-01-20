@@ -345,7 +345,8 @@ def check_dataset(data, autodownload=True):
     if isinstance(data, (str, Path)):
         with open(data, errors='ignore') as f:
             data = yaml.safe_load(f)  # dictionary
-
+    return data
+    print("===> data: ", data)
     # Parse yaml
     path = extract_dir or Path(data.get('path') or '')  # optional 'path' default to '.'
     for k in 'train', 'val', 'test':

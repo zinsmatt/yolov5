@@ -104,11 +104,15 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     init_seeds(1 + RANK)
     with torch_distributed_zero_first(LOCAL_RANK):
         data_dict = data_dict or check_dataset(data)  # check if None
-    train_path, val_path = data_dict['train'], data_dict['val']
+    # train_path, val_path = data_dict['train'], data_dict['val']
+
     nc = 1 if single_cls else int(data_dict['nc'])  # number of classes
     names = ['item'] if single_cls and len(data_dict['names']) != 1 else data_dict['names']  # class names
     assert len(names) == nc, f'{len(names)} names found for nc={nc} dataset in {data}'  # check
     is_coco = data.endswith('coco.yaml') and nc == 80  # COCO dataset
+
+
+
 
     # Model
     check_suffix(weights, '.pt')  # check weights
@@ -219,10 +223,10 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         LOGGER.info('Using SyncBatchNorm()')
 
     # Trainloader
-    train_loader, dataset = create_dataloader(train_path, imgsz, batch_size // WORLD_SIZE, gs, single_cls,
+    train_loader, dataset = create_dataloader(data_dict["train"], imgsz, batch_size // WORLD_SIZE, gs, single_cls,
                                               hyp=hyp, augment=True, cache=opt.cache, rect=opt.rect, rank=LOCAL_RANK,
                                               workers=workers, image_weights=opt.image_weights, quad=opt.quad,
-                                              prefix=colorstr('train: '), json_dataset="/media/mzins/DATA1/7-Scenes/chess/annotations_manual_seq_01_04_06/annotations_manual_seq_01_04_06_correct_path.json")
+                                              prefix=colorstr('train: '))
     mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
     nb = len(train_loader)  # number of batches
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
@@ -233,10 +237,10 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     
     # Process 0
     if RANK in [-1, 0]:
-        val_loader = create_dataloader(val_path, imgsz, batch_size // WORLD_SIZE * 2, gs, single_cls,
+        val_loader = create_dataloader(data_dict["val"], imgsz, batch_size // WORLD_SIZE * 2, gs, single_cls,
                                        hyp=hyp, cache=None if noval else opt.cache, rect=True, rank=-1,
                                        workers=workers, pad=0.5,
-                                       prefix=colorstr('val: '), json_dataset="/media/mzins/DATA1/7-Scenes/chess/annotations_manual_seq_01_04_06/annotations_manual_seq_01_04_06_correct_path.json")[0]
+                                       prefix=colorstr('val: '))[0]
 
         if not resume:
             labels = np.concatenate(dataset.labels, 0)

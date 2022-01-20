@@ -93,7 +93,7 @@ def exif_transpose(image):
 
 
 def create_dataloader(path, imgsz, batch_size, stride, single_cls=False, hyp=None, augment=False, cache=False, pad=0.0,
-                      rect=False, rank=-1, workers=8, image_weights=False, quad=False, prefix='', json_dataset=""):
+                      rect=False, rank=-1, workers=8, image_weights=False, quad=False, prefix=''):
     # Make sure only the first process in DDP process the dataset first, and the following others can use the cache
     with torch_distributed_zero_first(rank):
         dataset = LoadImagesAndLabels(path, imgsz, batch_size,
@@ -105,8 +105,7 @@ def create_dataloader(path, imgsz, batch_size, stride, single_cls=False, hyp=Non
                                       stride=int(stride),
                                       pad=pad,
                                       image_weights=image_weights,
-                                      prefix=prefix,
-                                      json_dataset=json_dataset)
+                                      prefix=prefix)
 
     batch_size = min(batch_size, len(dataset))
     nw = min([os.cpu_count(), batch_size if batch_size > 1 else 0, workers])  # number of workers
@@ -387,7 +386,7 @@ class LoadImagesAndLabels(Dataset):
     cache_version = 0.6  # dataset labels *.cache version
 
     def __init__(self, path, img_size=640, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
-                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix='', json_dataset=""):
+                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix=''):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -396,42 +395,42 @@ class LoadImagesAndLabels(Dataset):
         self.mosaic = self.augment and not self.rect  # load 4 images at a time into a mosaic (only during training)
         self.mosaic_border = [-img_size // 2, -img_size // 2]
         self.stride = stride
-        self.path = path
+        self.path = path # path to JSON dataset [mz]
         self.albumentations = Albumentations() if augment else None
 
 
-        # [mz] Load images files list
-        try:
-            f = []  # image files
-            for p in path if isinstance(path, list) else [path]:
-                p = Path(p)  # os-agnostic
-                if p.is_dir():  # dir
-                    f += glob.glob(str(p / '**' / '*.*'), recursive=True)
-                    # f = list(p.rglob('*.*'))  # pathlib
-                elif p.is_file():  # file
-                    with open(p, 'r') as t:
-                        t = t.read().strip().splitlines()
-                        parent = str(p.parent) + os.sep
-                        f += [x.replace('./', parent) if x.startswith('./') else x for x in t]  # local to global path
-                        # f += [p.parent / x.lstrip(os.sep) for x in t]  # local to global path (pathlib)
-                else:
-                    raise Exception(f'{prefix}{p} does not exist')
-            self.img_files = sorted([x.replace('/', os.sep) for x in f if x.split('.')[-1].lower() in IMG_FORMATS])
-            # self.img_files = sorted([x for x in f if x.suffix[1:].lower() in IMG_FORMATS])  # pathlib
-            assert self.img_files, f'{prefix}No images found'
-        except Exception as e:
-            raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {HELP_URL}')
+        # # [mz] Load images files list
+        # try:
+        #     f = []  # image files
+        #     for p in path if isinstance(path, list) else [path]:
+        #         p = Path(p)  # os-agnostic
+        #         if p.is_dir():  # dir
+        #             f += glob.glob(str(p / '**' / '*.*'), recursive=True)
+        #             # f = list(p.rglob('*.*'))  # pathlib
+        #         elif p.is_file():  # file
+        #             with open(p, 'r') as t:
+        #                 t = t.read().strip().splitlines()
+        #                 parent = str(p.parent) + os.sep
+        #                 f += [x.replace('./', parent) if x.startswith('./') else x for x in t]  # local to global path
+        #                 # f += [p.parent / x.lstrip(os.sep) for x in t]  # local to global path (pathlib)
+        #         else:
+        #             raise Exception(f'{prefix}{p} does not exist')
+        #     self.img_files = sorted([x.replace('/', os.sep) for x in f if x.split('.')[-1].lower() in IMG_FORMATS])
+        #     # self.img_files = sorted([x for x in f if x.suffix[1:].lower() in IMG_FORMATS])  # pathlib
+        #     assert self.img_files, f'{prefix}No images found'
+        # except Exception as e:
+        #     raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {HELP_URL}')
 
 
-        if len(json_dataset) == 0:
+        if path is None or len(path) == 0:
             raise Exception("Error: missing JSON dataset file")
             exit()
 
         ### [mz] Load JSON dataset
         try:
-            with open(json_dataset, "r") as fin:
+            with open(path, "r") as fin:
                 json_data = json.load(fin)
-            if "test" in json_dataset:
+            if "test" in path:
                 self.img_files = [data["file_name"] for data in json_data]#[::2]#[:300] ###################### LIMIT SIZE
             else:
                 self.img_files = [data["file_name"] for data in json_data]#[:24]##[:1500] ###################### LIMIT SIZE
@@ -474,7 +473,7 @@ class LoadImagesAndLabels(Dataset):
                     annots.append(label)
                 self.annotations.append(np.array(annots))
         except Exception as e:
-            raise Exception("Error loading data from", json_dataset)
+            raise Exception("Error loading data from", path)
 
         
         # print(len(self.img_files), "================> ", self.img_files[:5])
@@ -482,8 +481,9 @@ class LoadImagesAndLabels(Dataset):
 
         # Check cache
         self.label_files = img2label_paths(self.img_files)  # labels
-        cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix('.cache') # initial
-        cache_path = Path("/home/mzins/dev/yolov5_bbox/dataset/labels.cache")
+        # cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix('.cache') # initial
+        # cache_path = Path(self.label_files[0]).parent.with_suffix('.cache') # initial
+        cache_path = Path("labels.cache")
         try:
             cache, exists = np.load(cache_path, allow_pickle=True).item(), True  # load dict
             assert cache['version'] == self.cache_version  # same version
@@ -558,6 +558,7 @@ class LoadImagesAndLabels(Dataset):
 
         # Cache images into memory for faster training (WARNING: large datasets may exceed system RAM)
         self.imgs, self.img_npy = [None] * n, [None] * n
+        cache_images = False
         if cache_images:
             if cache_images == 'disk':
                 self.im_cache_dir = Path(Path(self.img_files[0]).parent.as_posix() + '_npy')
