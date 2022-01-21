@@ -168,7 +168,12 @@ class LoadImages:
         else:
             raise Exception(f'ERROR: {p} does not exist')
 
-        images = [x for x in files if x.split('.')[-1].lower() in IMG_FORMATS]
+        if os.path.splitext(p)[1] == ".json":
+            with open(p, "r") as fin:
+                data = json.load(fin)
+            images = [d["file_name"] for d in data]
+        else:
+            images = [x for x in files if x.split('.')[-1].lower() in IMG_FORMATS]
         videos = [x for x in files if x.split('.')[-1].lower() in VID_FORMATS]
         ni, nv = len(images), len(videos)
 
@@ -752,8 +757,9 @@ def load_mosaic(self, index):
 
     # Concat/clip labels
     labels4 = np.concatenate(labels4, 0)
-    for x in (labels4[:, 1:], *segments4):
-        np.clip(x, 0, 2 * s, out=x)  # clip when using random_perspective()
+    # [mz] TEST
+    # for x in (labels4[:, 1:], *segments4):
+    #     np.clip(x, 0, 2 * s, out=x)  # clip when using random_perspective()
     # img4, labels4 = replicate(img4, labels4)  # replicate
 
     # Augment

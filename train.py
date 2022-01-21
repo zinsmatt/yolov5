@@ -220,6 +220,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
 
     # Process 0
+    opt.cache = False
     if RANK in [-1, 0]:
         val_loader = create_dataloader(data_dict["val"], imgsz, batch_size // WORLD_SIZE * 2, gs, single_cls,
                                        hyp=hyp, cache=None if noval else opt.cache, rect=True, rank=-1,
@@ -291,7 +292,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         LOGGER.info(('\n' + '%10s' * 7) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'labels', 'img_size'))
         if RANK in [-1, 0]:
             pbar = tqdm(pbar, total=nb)  # progress bar
-        optimizer.zero_grad()
+        # optimizer.zero_grad() # [mz]
         for i, (imgs, targets, paths, _) in pbar:  # batch -------------------------------------------------------------
             ni = i + nb * epoch  # number integrated batches (since train start)
             imgs = imgs.to(device, non_blocking=True).float() / 255.0  # uint8 to float32, 0-255 to 0.0-1.0
