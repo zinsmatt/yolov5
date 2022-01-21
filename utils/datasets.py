@@ -390,36 +390,71 @@ class LoadImagesAndLabels(Dataset):
         self.path = path
         self.albumentations = Albumentations() if augment else None
 
+        # try:
+        #     f = []  # image files
+        #     for p in path if isinstance(path, list) else [path]:
+        #         p = Path(p)  # os-agnostic
+        #         if p.is_dir():  # dir
+        #             f += glob.glob(str(p / '**' / '*.*'), recursive=True)
+        #             # f = list(p.rglob('*.*'))  # pathlib
+        #         elif p.is_file():  # file
+        #             with open(p, 'r') as t:
+        #                 t = t.read().strip().splitlines()
+        #                 parent = str(p.parent) + os.sep
+        #                 f += [x.replace('./', parent) if x.startswith('./') else x for x in t]  # local to global path
+        #                 # f += [p.parent / x.lstrip(os.sep) for x in t]  # local to global path (pathlib)
+        #         else:
+        #             raise Exception(f'{prefix}{p} does not exist')
+        #     self.img_files = sorted([x.replace('/', os.sep) for x in f if x.split('.')[-1].lower() in IMG_FORMATS])
+        #     # self.img_files = sorted([x for x in f if x.suffix[1:].lower() in IMG_FORMATS])  # pathlib
+        #     assert self.img_files, f'{prefix}No images found'
+        # except Exception as e:
+        #     raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {HELP_URL}')
         try:
-            f = []  # image files
-            for p in path if isinstance(path, list) else [path]:
-                p = Path(p)  # os-agnostic
-                if p.is_dir():  # dir
-                    f += glob.glob(str(p / '**' / '*.*'), recursive=True)
-                    # f = list(p.rglob('*.*'))  # pathlib
-                elif p.is_file():  # file
-                    with open(p, 'r') as t:
-                        t = t.read().strip().splitlines()
-                        parent = str(p.parent) + os.sep
-                        f += [x.replace('./', parent) if x.startswith('./') else x for x in t]  # local to global path
-                        # f += [p.parent / x.lstrip(os.sep) for x in t]  # local to global path (pathlib)
-                else:
-                    raise Exception(f'{prefix}{p} does not exist')
-            self.img_files = sorted([x.replace('/', os.sep) for x in f if x.split('.')[-1].lower() in IMG_FORMATS])
-            # self.img_files = sorted([x for x in f if x.suffix[1:].lower() in IMG_FORMATS])  # pathlib
-            assert self.img_files, f'{prefix}No images found'
+            with open(path, "r") as fin:
+                json_data = json.load(fin)
+            if "test" in path:
+                self.img_files = [data["file_name"] for data in json_data]
+            else:
+                self.img_files = [data["file_name"] for data in json_data]
+            self.annotations = []
+            for fi, f in enumerate(self.img_files):
+                data = json_data[fi]
+                w = data["width"]
+                h = data["height"]
+                annots = []
+                for det in data["annotations"]:
+                    cat = det["category_id"]
+                    x1, y1, x2, y2 = det["bbox"]
+                    center = [(x1 + x2) / 2, (y1 + y2) / 2]
+                    axes = [(x2 - x1), (y2 - y1)]
+                    center[0] /= w
+                    center[1] /= h
+                    axes[0] /= w
+                    axes[1] /= h
+                    label = [cat] + center + axes
+                    annots.append(label)
+                self.annotations.append(np.array(annots))
         except Exception as e:
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {HELP_URL}')
+            raise Exception("Error loading data from", path)
+        
+        cache_images = False
 
         # Check cache
         self.label_files = img2label_paths(self.img_files)  # labels
-        cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix('.cache')
-        try:
-            cache, exists = np.load(cache_path, allow_pickle=True).item(), True  # load dict
-            assert cache['version'] == self.cache_version  # same version
-            assert cache['hash'] == get_hash(self.label_files + self.img_files)  # same hash
-        except:
-            cache, exists = self.cache_labels(cache_path, prefix), False  # cache
+        cache_path = Path("dataset/labels.cache")
+        # cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix('.cache')
+        # try:
+        #     cache, exists = np.load(cache_path, allow_pickle=True).item(), True  # load dict
+        #     assert cache['version'] == self.cache_version  # same version
+        #     assert cache['hash'] == get_hash(self.label_files + self.img_files)  # same hash
+        # except:
+        #     cache, exists = self.cache_labels(cache_path, prefix), False  # cache
+        
+        cache, exists = self.cache_labels(cache_path, prefix), False  # cache
+        print("cache exists ? ", exists)
+
 
         # Display cache
         nf, nm, ne, nc, n = cache.pop('results')  # found, missing, empty, corrupted, total
@@ -510,7 +545,7 @@ class LoadImagesAndLabels(Dataset):
         nm, nf, ne, nc, msgs = 0, 0, 0, 0, []  # number missing, found, empty, corrupt, messages
         desc = f"{prefix}Scanning '{path.parent / path.stem}' images and labels..."
         with Pool(NUM_THREADS) as pool:
-            pbar = tqdm(pool.imap(verify_image_label, zip(self.img_files, self.label_files, repeat(prefix))),
+            pbar = tqdm(pool.imap(verify_image_label, zip(self.img_files, self.annotations, repeat(prefix))),
                         desc=desc, total=len(self.img_files))
             for im_file, l, shape, segments, nm_f, nf_f, ne_f, nc_f, msg in pbar:
                 nm += nm_f
@@ -882,53 +917,70 @@ def autosplit(path='../datasets/coco128/images', weights=(0.9, 0.1, 0.0), annota
 
 
 def verify_image_label(args):
-    # Verify one image-label pair
-    im_file, lb_file, prefix = args
-    nm, nf, ne, nc, msg, segments = 0, 0, 0, 0, '', []  # number (missing, found, empty, corrupt), message, segments
-    try:
-        # verify images
-        im = Image.open(im_file)
-        im.verify()  # PIL verify
-        shape = exif_size(im)  # image size
-        assert (shape[0] > 9) & (shape[1] > 9), f'image size {shape} <10 pixels'
-        assert im.format.lower() in IMG_FORMATS, f'invalid image format {im.format}'
-        if im.format.lower() in ('jpg', 'jpeg'):
-            with open(im_file, 'rb') as f:
-                f.seek(-2, 2)
-                if f.read() != b'\xff\xd9':  # corrupt JPEG
-                    ImageOps.exif_transpose(Image.open(im_file)).save(im_file, 'JPEG', subsampling=0, quality=100)
-                    msg = f'{prefix}WARNING: {im_file}: corrupt JPEG restored and saved'
+    nm = 0 # missing
+    nf = 1 # found
+    ne = 0 # empty
+    nc = 0 # corrupt
+    msg = 0 # message
 
-        # verify labels
-        if os.path.isfile(lb_file):
-            nf = 1  # label found
-            with open(lb_file, 'r') as f:
-                l = [x.split() for x in f.read().strip().splitlines() if len(x)]
-                if any([len(x) > 8 for x in l]):  # is segment
-                    classes = np.array([x[0] for x in l], dtype=np.float32)
-                    segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in l]  # (cls, xy1...)
-                    l = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
-                l = np.array(l, dtype=np.float32)
-            nl = len(l)
-            if nl:
-                assert l.shape[1] == 5, f'labels require 5 columns, {l.shape[1]} columns detected'
-                assert (l >= 0).all(), f'negative label values {l[l < 0]}'
-                assert (l[:, 1:] <= 1).all(), f'non-normalized or out of bounds coordinates {l[:, 1:][l[:, 1:] > 1]}'
-                l = np.unique(l, axis=0)  # remove duplicate rows
-                if len(l) < nl:
-                    segments = np.unique(segments, axis=0)
-                    msg = f'{prefix}WARNING: {im_file}: {nl - len(l)} duplicate labels removed'
-            else:
-                ne = 1  # label empty
-                l = np.zeros((0, 5), dtype=np.float32)
-        else:
-            nm = 1  # label missing
-            l = np.zeros((0, 5), dtype=np.float32)
-        return im_file, l, shape, segments, nm, nf, ne, nc, msg
-    except Exception as e:
-        nc = 1
-        msg = f'{prefix}WARNING: {im_file}: ignoring corrupt image/label: {e}'
-        return [None, None, None, None, nm, nf, ne, nc, msg]
+    annot = args[1]
+    if len(annot) == 0:
+        ne = 1
+        nf = 0
+        annot = np.zeros((0, 5), dtype=np.float32)
+    img_file = args[0]
+    im = Image.open(img_file)
+    im.verify()  # PIL verify
+    shape = exif_size(im)  # image size
+    return [img_file, annot, shape, [], nm, nf, ne, nc, msg]
+
+    # # Verify one image-label pair
+    # im_file, lb_file, prefix = args
+    # nm, nf, ne, nc, msg, segments = 0, 0, 0, 0, '', []  # number (missing, found, empty, corrupt), message, segments
+    # try:
+    #     # verify images
+    #     im = Image.open(im_file)
+    #     im.verify()  # PIL verify
+    #     shape = exif_size(im)  # image size
+    #     assert (shape[0] > 9) & (shape[1] > 9), f'image size {shape} <10 pixels'
+    #     assert im.format.lower() in IMG_FORMATS, f'invalid image format {im.format}'
+    #     if im.format.lower() in ('jpg', 'jpeg'):
+    #         with open(im_file, 'rb') as f:
+    #             f.seek(-2, 2)
+    #             if f.read() != b'\xff\xd9':  # corrupt JPEG
+    #                 ImageOps.exif_transpose(Image.open(im_file)).save(im_file, 'JPEG', subsampling=0, quality=100)
+    #                 msg = f'{prefix}WARNING: {im_file}: corrupt JPEG restored and saved'
+
+    #     # verify labels
+    #     if os.path.isfile(lb_file):
+    #         nf = 1  # label found
+    #         with open(lb_file, 'r') as f:
+    #             l = [x.split() for x in f.read().strip().splitlines() if len(x)]
+    #             if any([len(x) > 8 for x in l]):  # is segment
+    #                 classes = np.array([x[0] for x in l], dtype=np.float32)
+    #                 segments = [np.array(x[1:], dtype=np.float32).reshape(-1, 2) for x in l]  # (cls, xy1...)
+    #                 l = np.concatenate((classes.reshape(-1, 1), segments2boxes(segments)), 1)  # (cls, xywh)
+    #             l = np.array(l, dtype=np.float32)
+    #         nl = len(l)
+    #         if nl:
+    #             assert l.shape[1] == 5, f'labels require 5 columns, {l.shape[1]} columns detected'
+    #             assert (l >= 0).all(), f'negative label values {l[l < 0]}'
+    #             assert (l[:, 1:] <= 1).all(), f'non-normalized or out of bounds coordinates {l[:, 1:][l[:, 1:] > 1]}'
+    #             l = np.unique(l, axis=0)  # remove duplicate rows
+    #             if len(l) < nl:
+    #                 segments = np.unique(segments, axis=0)
+    #                 msg = f'{prefix}WARNING: {im_file}: {nl - len(l)} duplicate labels removed'
+    #         else:
+    #             ne = 1  # label empty
+    #             l = np.zeros((0, 5), dtype=np.float32)
+    #     else:
+    #         nm = 1  # label missing
+    #         l = np.zeros((0, 5), dtype=np.float32)
+    #     return im_file, l, shape, segments, nm, nf, ne, nc, msg
+    # except Exception as e:
+    #     nc = 1
+    #     msg = f'{prefix}WARNING: {im_file}: ignoring corrupt image/label: {e}'
+    #     return [None, None, None, None, nm, nf, ne, nc, msg]
 
 
 def dataset_stats(path='coco128.yaml', autodownload=False, verbose=False, profile=False, hub=False):
