@@ -10,7 +10,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
-
+import json
 import cv2
 import numpy as np
 import torch
@@ -57,6 +57,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         hide_conf=False,  # hide confidences
         half=False,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
+        output="out_detections_yolov5.json"
         ):
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
@@ -129,10 +130,18 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
     vid_path, vid_writer = [None] * bs, [None] * bs
 
     # Run inference
+    json_detections = []
+    json_out_file = output
+
     if pt and device.type != 'cpu':
         model(torch.zeros(1, 3, *imgsz).to(device).type_as(next(model.parameters())))  # run once
     dt, seen = [0.0, 0.0, 0.0], 0
     for path, img, im0s, vid_cap in dataset:
+        # Fill JSON info
+        image_data = {}
+        image_data["file_name"] = path
+        detections = []
+
         t1 = time_sync()
         if onnx:
             img = img.astype('float32')
@@ -196,7 +205,10 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                 p, s, im0, frame = path, '', im0s.copy(), getattr(dataset, 'frame', 0)
 
             p = Path(p)  # to Path
-            save_path = str(save_dir / p.name)  # img.jpg
+            sp = str(p).split("/")
+            fp = Path(sp[-2] + "_" + sp[-1])
+            save_path = str(save_dir / fp)  # img.jpg
+            # save_path = str(save_dir / p.name)  # img.jpg
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
             s += '%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
@@ -226,6 +238,14 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         if save_crop:
                             save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
+                    bbox = [float(x.cpu()) for x in xyxy]
+                    det_dict = {
+                        "category_id": int(cls),
+                        "detection_score": float(conf.cpu()),
+                        "bbox": bbox,
+                    }
+                    detections.append(det_dict)
+
             # Print time (inference-only)
             print(f'{s}Done. ({t3 - t2:.3f}s)')
 
@@ -254,6 +274,12 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
                         vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer[i].write(im0)
 
+        image_data["detections"] = detections
+        json_detections.append(image_data)
+
+    with open(json_out_file, "w") as fout:
+        json.dump(json_detections, fout)
+                
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
     print(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
@@ -291,6 +317,7 @@ def parse_opt():
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
+    parser.add_argument('--output', type=str, default="out_detections_yolov5.json", help='Output detection file')
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(FILE.stem, opt)
