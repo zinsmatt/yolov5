@@ -1,0 +1,6 @@
+# Classes
+nc: 4  # number of classes
+train: "annotations_statues_train.json"
+val: "annotations_statues_train.json"
+
+names: ['statue', 'head', 'chest', 'bottom']  # class names
