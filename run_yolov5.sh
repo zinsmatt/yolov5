@@ -116,4 +116,16 @@
 # done
 
 
-python detect.py --source dataset_ismar_reloc_museum.json --weights runs/train/exp56/weights/last.pt --name ismar_reloc_museum  --output out_detections_yolov5_ismar_reloc_museum.json --nosave
+# python detect.py --source dataset_kitchen_1.json --weights yolov5m.pt --name kitchen_1  --output out_detections_yolov5_kitchen_1.json --nosave
+# python detect.py --source dataset_kitchen_2.json --weights yolov5m.pt --name kitchen_2  --output out_detections_yolov5_kitchen_2.json --nosave
+# python detect.py --source dataset_kitchen_3.json --weights yolov5m.pt --name kitchen_3  --output out_detections_yolov5_kitchen_3.json --nosave
+# for i in 4 5
+# do
+#     python detect.py --source dataset_kitchen_$i.json --weights yolov5m.pt --name kitchen_$i  --output out_detections_yolov5_kitchen_$i.json --nosave
+# done
+
+for i in 1
+do
+    python detect.py --source dataset_musee_meuble_$i.json --weights yolov5m.pt --name musee_meuble_$i  --output out_detections_yolov5_musee_meuble_$i.json --nosave
+done
+

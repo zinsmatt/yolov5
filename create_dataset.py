@@ -83,25 +83,26 @@ input_path = "/media/mzins/DATA1/VideoAppart/ISMAR/reloc/frames"
 output_file = "dataset_ismar_reloc.json"
 
 
-# for i in range(1, 18):
-    # input_path = "/media/mzins/DATA1/VideoAppart/statues_objects_test_%d/frames" % i
-    # output_file = "dataset_statues_objects_test_%d.json" % i
+for i in [1]: #range(1, 3):
+    # input_path = "/media/mzins/DATA1/VideoAppart/kitchen_%d/frames" % i
+    # output_file = "dataset_kitchen_%d.json" % i
 
-input_path = "/media/mzins/DATA1/VideoAppart/ISMAR/reloc/museum/frames"
-output_file = "dataset_ismar_reloc_museum.json"
+    input_path = "/media/mzins/DATA1/VideoAppart/musee_meuble_%d/frames" % i
+    output_file = "dataset_musee_meuble_%d.json" % i
 
 
-# files = sorted(glob.glob(os.path.join(input_path, "*.jpg")) + glob.glob(os.path.join(input_path, "*.color.png")))
-files = sorted(glob.glob(os.path.join(input_path, "*.png")))
-print(os.path.join(input_path, "*.png"))
 
-w = 640
-h = 360 #480
+    # files = sorted(glob.glob(os.path.join(input_path, "*.jpg")) + glob.glob(os.path.join(input_path, "*.color.png")))
+    files = sorted(glob.glob(os.path.join(input_path, "*.png")))
+    print(os.path.join(input_path, "*.png"))
 
-out_data = []
-for f in files[::1]: #############################################################################!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    print(f)
-    out_data.append({"file_name": f, "height": h, "width": w})
+    w = 640
+    h = 360 #480
 
-with open(output_file, "w") as fout:
-    json.dump(out_data, fout)
+    out_data = []
+    for f in files[::1]: #############################################################################!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        print(f)
+        out_data.append({"file_name": f, "height": h, "width": w})
+
+    with open(output_file, "w") as fout:
+        json.dump(out_data, fout)
