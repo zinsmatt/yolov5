@@ -124,8 +124,19 @@
 #     python detect.py --source dataset_kitchen_$i.json --weights yolov5m.pt --name kitchen_$i  --output out_detections_yolov5_kitchen_$i.json --nosave
 # done
 
-for i in 1
+# for i in 1
+# do
+#     python detect.py --source dataset_musee_meuble_$i.json --weights checkpoint_statues_objects/last.pt --name musee_meuble_$i  --output out_detections_yolov5_musee_meuble_$i.json --nosave
+# done
+
+for i in 6 7  #1 2 3 4 #17 18  #13 14 #7 8 9 10 11 12 # 1 2 3 4 5 6  #13 14  #8 9 10 #5 6 7 # 1 2 3 4 #5 6 7 8 9 10 #1 2 3 4 #13 14 15  #9 #8 10 11  #6 7 #4 5 #1 2 3
 do
-    python detect.py --source dataset_musee_meuble_$i.json --weights yolov5m.pt --name musee_meuble_$i  --output out_detections_yolov5_musee_meuble_$i.json --nosave
+    # python detect.py --source dataset_desk_$i.json --weights yolov5m.pt --name desk_$i  --output out_detections_yolov5_desk_$i.json --nosave
+    # python detect.py --source dataset_sink_$i.json --weights yolov5m.pt --name sink_$i  --output out_detections_yolov5_sink_$i.json --nosave
+    # python detect.py --source dataset_test_detect_objects_$i.json --weights yolov5m.pt --name test_detect_objects_$i  --output out_detections_yolov5_test_detect_objects_$i.json #--nosave
+    # python detect.py --source dataset_table_$i.json --weights yolov5m.pt --name table_$i  --output out_detections_yolov5_table_$i.json --nosave
+    # python detect.py --source dataset_bureau_$i.json --weights yolov5m.pt --name bureau_$i  --output out_detections_yolov5_bureau_$i.json --nosave
+    # python detect.py --source dataset_meuble_$i.json --weights checkpoint_statues_objects/last.pt --name meuble_$i  --output out_detections_yolov5_meuble_$i.json --nosave
+    python detect.py --source dataset_big_statue_$i.json --weights checkpoint_statues_objects_big_statue/last.pt --name big_statue_$i  --output out_detections_yolov5_big_statue_$i.json  --nosave
 done
 

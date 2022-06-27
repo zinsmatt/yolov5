@@ -83,14 +83,33 @@ input_path = "/media/mzins/DATA1/VideoAppart/ISMAR/reloc/frames"
 output_file = "dataset_ismar_reloc.json"
 
 
-for i in [1]: #range(1, 3):
+for i in [6,7]: #range(1, 3):
     # input_path = "/media/mzins/DATA1/VideoAppart/kitchen_%d/frames" % i
     # output_file = "dataset_kitchen_%d.json" % i
 
-    input_path = "/media/mzins/DATA1/VideoAppart/musee_meuble_%d/frames" % i
-    output_file = "dataset_musee_meuble_%d.json" % i
+    # input_path = "/media/mzins/DATA1/VideoAppart/musee_meuble_%d/frames" % i
+    # output_file = "dataset_musee_meuble_%d.json" % i
 
+    # input_path = "/media/mzins/DATA1/VideoAppart/desk_%d/frames" % i
+    # output_file = "dataset_desk_%d.json" % i
 
+    # input_path = "/media/mzins/DATA1/VideoAppart/sink_%d/frames" % i
+    # output_file = "dataset_sink_%d.json" % i
+
+    # input_path = "/media/mzins/DATA1/VideoAppart/test_detect_objects_%d/frames" % i
+    # output_file = "dataset_test_detect_objects_%d.json" % i
+
+    # input_path = "/media/mzins/DATA1/VideoAppart/table_%d/frames" % i
+    # output_file = "dataset_table_%d.json" % i
+
+    # input_path = "/media/mzins/DATA1/VideoAppart/meuble_%d/frames" % i
+    # output_file = "dataset_meuble_%d.json" % i
+
+    # input_path = "/media/mzins/DATA1/VideoAppart/bureau_%d/frames" % i
+    # output_file = "dataset_bureau_%d.json" % i
+
+    input_path = "/media/mzins/DATA1/VideoAppart/big_statue_%d/frames" % i
+    output_file = "dataset_big_statue_%d.json" % i
 
     # files = sorted(glob.glob(os.path.join(input_path, "*.jpg")) + glob.glob(os.path.join(input_path, "*.color.png")))
     files = sorted(glob.glob(os.path.join(input_path, "*.png")))
