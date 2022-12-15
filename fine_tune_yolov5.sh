@@ -22,5 +22,7 @@
 # python train.py --batch 8 --epochs 2000 --data dataset_Statues_Objects.yaml --weights yolov5m.pt --cfg yolov5m.yaml --hyp data/hyps/hyp.finetune.yaml ## shoould go to exp55 (bad) => better 56
 
 
-python train.py --batch 8 --epochs 2000 --data dataset_Statues_Objects.yaml --weights yolov5m.pt --cfg yolov5m.yaml --hyp data/hyps/hyp.finetune.yaml
+# python train.py --batch 8 --epochs 2000 --data dataset_Statues_Objects.yaml --weights yolov5m.pt --cfg yolov5m.yaml --hyp data/hyps/hyp.finetune.yaml ==> 57 : should have been with objects on the meuble but i think the wrong dataset .yaml was given
+
+python train.py --batch 8 --epochs 2000 --data dataset_Statues_Objects_Big_Statue.yaml --weights yolov5m.pt --cfg yolov5m.yaml --hyp data/hyps/hyp.finetune.yaml
 

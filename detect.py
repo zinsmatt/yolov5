@@ -59,6 +59,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         dnn=False,  # use OpenCV DNN for ONNX inference
         output="out_detections_yolov5.json"
         ):
+    times = []
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
@@ -248,7 +249,7 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
 
             # Print time (inference-only)
             print(f'{s}Done. ({t3 - t2:.3f}s)')
-
+            times.append(t3 - t2)
             # Stream results
             im0 = annotator.result()
             if view_img:
@@ -288,6 +289,9 @@ def run(weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         print(f"Results saved to {colorstr('bold', save_dir)}{s}")
     if update:
         strip_optimizer(weights)  # update model (to fix SourceChangeWarning)
+
+    print("median time = ", np.median(times))
+    print("mean time = ", np.mean(times))
 
 
 def parse_opt():
